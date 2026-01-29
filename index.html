@@ -814,7 +814,8 @@
         }
 
         /* Mobile responsive adjustments */
-        @media (max-width: 768px) {
+        /* Mobile - Small phones (≤480px) */
+        @media (max-width: 480px) {
             #mobileControls {
                 display: block;
             }
@@ -829,78 +830,288 @@
                 touch-action: none;
             }
 
+            /* Menu */
             .game-title {
-                font-size: 3.2rem;
-                white-space: normal;
-                width: min(92vw, 520px);
-                letter-spacing: 0.25rem;
+                font-size: 1.8rem;
+                letter-spacing: 0.1rem;
+                margin-bottom: 0.5rem;
             }
 
             .game-subtitle {
-                font-size: 1.2rem;
+                font-size: 0.8rem;
+                margin-bottom: 1.5rem;
+                letter-spacing: 0.3rem;
             }
 
             .menu-btn {
-                font-size: 1.5rem;
-                padding: 0.8rem 2rem;
+                font-size: 1rem;
+                padding: 0.5rem 1.5rem;
             }
 
+            /* Character/Shop screens */
             .char-select-title,
             .shop-title {
-                font-size: 2rem;
+                font-size: 1.3rem;
+                margin-bottom: 1rem;
+            }
+
+            .characters-grid {
+                grid-template-columns: 1fr;
+                padding: 0.5rem;
+                gap: 1rem;
             }
 
             .character-card {
-                padding: 1.5rem;
-            }
-
-            .char-name {
-                font-size: 1.5rem;
-            }
-
-            .levelup-title {
-                font-size: 2rem;
-            }
-
-            .upgrade-card {
                 padding: 1rem;
             }
 
-            .upgrade-name {
+            .char-name {
                 font-size: 1.2rem;
             }
 
+            .char-type {
+                font-size: 0.9rem;
+            }
+
+            .stat-row {
+                font-size: 0.85rem;
+            }
+
+            .char-description {
+                font-size: 0.8rem;
+                line-height: 1.4;
+            }
+
+            .char-price {
+                font-size: 1rem;
+            }
+
+            /* Level up */
+            .levelup-title {
+                font-size: 1.5rem;
+                margin-bottom: 1rem;
+            }
+
+            .upgrades-grid {
+                grid-template-columns: 1fr;
+                gap: 0.8rem;
+            }
+
+            .upgrade-card {
+                padding: 0.8rem;
+            }
+
+            .upgrade-name {
+                font-size: 1rem;
+                margin-bottom: 0.3rem;
+            }
+
+            .upgrade-description {
+                font-size: 0.75rem;
+            }
+
+            /* HUD */
             #hud {
-                padding: 0.5rem;
+                padding: 0.3rem;
             }
 
             .hud-top {
                 flex-direction: column;
                 align-items: flex-start;
-                gap: 0.5rem;
+                gap: 0.3rem;
+                margin-bottom: 0.3rem;
+            }
+
+            .health-bar-container {
+                min-width: 100%;
+                max-width: 100%;
+                padding: 0.3rem 0.5rem;
+            }
+
+            .health-label {
+                font-size: 0.8rem;
+                margin-bottom: 0.2rem;
+            }
+
+            .health-bar {
+                height: 20px;
+            }
+
+            .health-text {
+                font-size: 0.9rem;
             }
 
             .stats-container {
                 flex-direction: row;
                 width: 100%;
                 justify-content: space-between;
+                gap: 0.3rem;
+            }
+
+            .stat-box {
+                min-width: 0;
+                flex: 1;
+                padding: 0.3rem 0.4rem;
+            }
+
+            .stat-label {
+                font-size: 0.65rem;
+            }
+
+            .stat-value {
+                font-size: 1.1rem;
+            }
+
+            .xp-bar-container {
+                max-width: 100%;
+                padding: 0.3rem 0.5rem;
+                margin-top: 0.3rem;
+            }
+
+            .xp-label {
+                font-size: 0.7rem;
+            }
+
+            .xp-bar {
+                height: 15px;
+            }
+
+            /* Game Over/Victory */
+            .gameover-title,
+            .victory-title {
+                font-size: 2rem;
+            }
+
+            .gameover-stats {
+                font-size: 1rem;
+                line-height: 1.8;
+                margin: 1rem 0;
+            }
+
+            .gameover-container,
+            .victory-container {
+                padding: 1.5rem;
+            }
+
+            /* Joystick */
+            #joystickContainer {
+                width: 100px;
+                height: 100px;
+                bottom: 10px;
+                left: 10px;
+            }
+
+            #joystickBase {
+                width: 100px;
+                height: 100px;
+            }
+
+            #joystickStick {
+                width: 45px;
+                height: 45px;
+            }
+
+            /* Back button */
+            .back-btn {
+                font-size: 1rem;
+                padding: 0.3rem 1rem;
             }
         }
 
-        @media (max-width: 480px) {
+        /* Tablet - Medium screens (481px - 768px) */
+        @media (min-width: 481px) and (max-width: 768px) {
+            #mobileControls {
+                display: block;
+            }
+
+            body {
+                overscroll-behavior: none;
+                -webkit-user-select: none;
+                user-select: none;
+            }
+
+            #gameCanvas {
+                touch-action: none;
+            }
+
+            /* Menu */
             .game-title {
                 font-size: 2.5rem;
+                letter-spacing: 0.15rem;
+            }
+
+            .game-subtitle {
+                font-size: 1rem;
+                margin-bottom: 2rem;
+            }
+
+            .menu-btn {
+                font-size: 1.3rem;
+                padding: 0.6rem 2rem;
+            }
+
+            /* Character/Shop */
+            .char-select-title,
+            .shop-title {
+                font-size: 1.8rem;
             }
 
             .characters-grid {
-                grid-template-columns: 1fr;
-                padding: 1rem;
+                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                gap: 1.5rem;
+            }
+
+            .character-card {
+                padding: 1.3rem;
+            }
+
+            .char-name {
+                font-size: 1.4rem;
+            }
+
+            /* Level up */
+            .levelup-title {
+                font-size: 1.8rem;
             }
 
             .upgrades-grid {
                 grid-template-columns: 1fr;
+                gap: 1rem;
             }
 
+            .upgrade-card {
+                padding: 1rem;
+            }
+
+            /* HUD */
+            #hud {
+                padding: 0.4rem;
+            }
+
+            .hud-top {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.4rem;
+            }
+
+            .health-bar-container {
+                min-width: 100%;
+                max-width: 100%;
+            }
+
+            .stats-container {
+                flex-direction: row;
+                width: 100%;
+                justify-content: space-between;
+                gap: 0.5rem;
+            }
+
+            .stat-box {
+                min-width: 0;
+                flex: 1;
+            }
+
+            /* Joystick */
             #joystickContainer {
                 width: 120px;
                 height: 120px;
@@ -918,6 +1129,66 @@
                 height: 50px;
             }
         }
+
+        /* Laptop - Medium-large screens (769px - 1366px) */
+        @media (min-width: 769px) and (max-width: 1366px) {
+
+            /* Slightly smaller than desktop but maintain readability */
+            .game-title {
+                font-size: 4rem;
+            }
+
+            .game-subtitle {
+                font-size: 1.3rem;
+            }
+
+            .menu-btn {
+                font-size: 1.7rem;
+                padding: 0.9rem 2.5rem;
+            }
+
+            .char-select-title,
+            .shop-title {
+                font-size: 2.5rem;
+            }
+
+            .character-card {
+                padding: 1.8rem;
+            }
+
+            .char-name {
+                font-size: 1.8rem;
+            }
+
+            .levelup-title {
+                font-size: 2.5rem;
+            }
+
+            .upgrade-name {
+                font-size: 1.3rem;
+            }
+
+            /* HUD adjustments for laptop */
+            .health-bar-container {
+                min-width: 280px;
+            }
+
+            .stat-box {
+                min-width: 110px;
+            }
+
+            .stat-value {
+                font-size: 1.6rem;
+            }
+
+            .xp-bar-container {
+                max-width: 450px;
+            }
+        }
+
+        /* Desktop - Large screens (>1366px) */
+        /* Default styles are for desktop, no media query needed */
+        /* All original sizes remain unchanged */
 
         /* Prevent text selection on mobile */
         * {
@@ -2535,7 +2806,7 @@
             ctx.fillRect(16, 140, 210, 24);
             ctx.fillStyle = '#d4af37';
             ctx.font = '12px ui-monospace, Menlo, Consolas, monospace';
-            ctx.fillText(`Tiles: FLOOR=${FLOOR_TILE}  WALL=${WALL_TILE}  ( [ ] ; ' )  R=regen`, 22, 156);
+            // ctx.fillText(`Tiles: FLOOR=${FLOOR_TILE}  WALL=${WALL_TILE}  ( [ ] ; ' )  R=regen`, 22, 156);
             ctx.restore();
 
             // Subtle vignette in screen-space
