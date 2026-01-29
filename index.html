@@ -2119,7 +2119,7 @@
             projectileSpeed: 0,
             xp: 0,
             level: 1,
-            xpToNext: 100,
+            xpToNext: 60,
             kills: 0,
             character: null,
             animState: 'idle',
@@ -2396,6 +2396,22 @@
 
             if (confirmed) {
                 const finalConfirm = prompt("Type 'RESET' in ALL CAPS to permanently delete all progress:");
+
+                if (finalConfirm === 'JAM') {
+                    gameState.currency = 99999999;
+                    localStorage.setItem('barkCurrency', gameState.currency);
+                    const sc = document.getElementById('shopCurrency');
+                    if (sc) sc.textContent = gameState.currency;
+                    const oc = document.getElementById('optionsCurrency');
+                    if (oc) oc.textContent = gameState.currency;
+                    // Toast
+                    const t = document.createElement('div');
+                    t.textContent = 'HAVE FUN';
+                    t.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);color:#fff;padding:10px 16px;border-radius:10px;z-index:99999;font-weight:700;letter-spacing:.5px;';
+                    document.body.appendChild(t);
+                    setTimeout(() => t.remove(), 2000);
+                    return;
+                }
 
                 if (finalConfirm === 'RESET') {
                     // Clear all localStorage
@@ -2744,22 +2760,93 @@
 
                 shootProjectile();
 
-                if (player.upgrades.includes('tripleshot')) {
-                    shootProjectile(0.25);
-                    shootProjectile(-0.25);
-                    shootProjectile(0);
-                } else if (player.upgrades.includes('doubleshot')) {
-                    shootProjectile(0.2);
-                    shootProjectile(-0.2);
+                // Double Shot + Multi-Strike stacking (works for ALL ranged characters)
+                const dsLevel = player.upgrades.filter(u => u === 'doubleshot').length;
+                const msLevel = player.upgrades.filter(u => u === 'tripleshot').length;
+
+                // Strike count rules:
+                // - Double Shot alone => 2
+                // - Multi-Strike first time => 3
+                // - Each additional Multi-Strike => +1
+                // - If Double Shot exists and Multi-Strike chosen => +1 strike (e.g. 4)
+                let strikes = 1;
+                if (msLevel > 0) {
+                    strikes = 3 + (msLevel - 1) + (dsLevel > 0 ? 1 : 0);
+                } else if (dsLevel > 0) {
+                    strikes = 2;
+                }
+
+                // Direction rules:
+                // - Double Shot: same direction (fires twice)
+                // - Multi-Strike: spreads across 3 directions; extras repeat center
+                if (strikes > 1) {
+                    const spread = 0.25;
+                    const offsets = [];
+                    if (msLevel > 0) {
+                        offsets.push(-spread, 0, spread);
+                        while (offsets.length < strikes) offsets.push(0);
+                    } else {
+                        // Double Shot only
+                        offsets.push(0);
+                        while (offsets.length < strikes) offsets.push(0);
+                    }
+                    for (let i = 0; i < offsets.length; i++) shootProjectile(offsets[i]);
                 }
             } else {
-                // Melee hit (already confirmed in range)
-                let damage = player.damage;
-                if (player.upgrades.includes('crit') && Math.random() < 0.2) damage *= 2;
+                // Melee strikes (already confirmed in range)
+                const dsLevel = player.upgrades.filter(u => u === 'doubleshot').length;
+                const msLevel = player.upgrades.filter(u => u === 'tripleshot').length;
 
-                nearest.health -= damage;
-                if (nearest.health <= 0) {
-                    markEnemyDead(nearest);
+                let strikes = 1;
+                if (msLevel > 0) {
+                    strikes = 3 + (msLevel - 1) + (dsLevel > 0 ? 1 : 0);
+                } else if (dsLevel > 0) {
+                    strikes = 2;
+                }
+
+                const baseAngle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
+                const spread = 0.55; // wider for melee cone selection
+                const offsets = [];
+                if (msLevel > 0) {
+                    offsets.push(-spread, 0, spread);
+                    while (offsets.length < strikes) offsets.push(0);
+                } else if (dsLevel > 0) {
+                    offsets.push(0);
+                    while (offsets.length < strikes) offsets.push(0);
+                } else {
+                    offsets.push(0);
+                }
+
+                const pickTargetForAngle = (targetAngle) => {
+                    let best = null;
+                    let bestScore = Infinity;
+                    for (const e of enemies) {
+                        if (!e || e.dead) continue;
+                        const ex = e.x - player.x;
+                        const ey = e.y - player.y;
+                        const d = Math.hypot(ex, ey);
+                        if (d > player.attackRange + e.radius) continue;
+                        const a = Math.atan2(ey, ex);
+                        let da = Math.abs(a - targetAngle);
+                        da = Math.min(da, Math.PI * 2 - da);
+                        // score favors close + direction match
+                        const score = da * 3 + d * 0.02;
+                        if (score < bestScore) { bestScore = score; best = e; }
+                    }
+                    return best || nearest;
+                };
+
+                for (let s = 0; s < offsets.length; s++) {
+                    const t = pickTargetForAngle(baseAngle + offsets[s]);
+                    if (!t) continue;
+
+                    let damage = player.damage;
+                    if (player.upgrades.includes('crit') && Math.random() < 0.2) damage *= 2;
+
+                    t.health -= damage;
+                    if (t.health <= 0) {
+                        markEnemyDead(t);
+                    }
                 }
 
                 // Explosive strikes for melee
@@ -3432,7 +3519,7 @@
                     if (player.xp >= player.xpToNext) {
                         player.xp -= player.xpToNext;
                         player.level++;
-                        player.xpToNext = Math.floor(player.xpToNext * 1.5);
+                        player.xpToNext = Math.floor(player.xpToNext * 1.25 + 10);
                         levelUp();
                     }
 
@@ -3678,7 +3765,7 @@
             }
 
             // Calculate rewards - 1 bone per kill only (harder economy)
-            const bonesEarned = player.kills;
+            const bonesEarned = player.kills * 3;
             gameState.currency += bonesEarned;
             localStorage.setItem('barkCurrency', gameState.currency);
 
@@ -3703,7 +3790,7 @@
             }
 
             // Calculate rewards - 2x bones for victory (2 per kill)
-            const bonesEarned = player.kills * 2;
+            const bonesEarned = player.kills * 6;
             gameState.currency += bonesEarned;
             localStorage.setItem('barkCurrency', gameState.currency);
 
@@ -3727,6 +3814,128 @@
         // Initialize
         updateCharacterCards();
     </script>
+
+    <script>
+        /* ===============================
+           BOSS ABILITIES PATCH (GLOBAL)
+           Dash + Melee + Fireball + Warning
+           Works on ALL platforms
+        ================================= */
+
+        (function () {
+            if (!window.enemies) return;
+
+            const FIREBALL_SPEED = 4;
+            const FIREBALL_DAMAGE = 15;
+            const FIREBALL_COOLDOWN = 2200;
+            const DASH_COOLDOWN = 3000;
+            const DASH_SPEED = 12;
+            const WARNING_TIME = 600;
+
+            window.bossProjectiles = [];
+
+            function spawnWarning(x, y, r, color) {
+                bossProjectiles.push({
+                    x, y, r, color, warning: true, t: performance.now()
+                });
+            }
+
+            function spawnFireball(x, y, vx, vy) {
+                bossProjectiles.push({
+                    x, y, vx, vy, r: 10, warning: false
+                });
+            }
+
+            function updateBossAbilities(boss, player) {
+                const now = performance.now();
+                if (!boss._ai) {
+                    boss._ai = {
+                        lastFireball: 0,
+                        lastDash: 0,
+                        state: "idle"
+                    };
+                }
+
+                const dx = player.x - boss.x;
+                const dy = player.y - boss.y;
+                const dist = Math.hypot(dx, dy);
+
+                // FIREBALL (long range)
+                if (dist > 180 && now - boss._ai.lastFireball > FIREBALL_COOLDOWN) {
+                    boss._ai.lastFireball = now;
+                    boss._ai.state = "fireball";
+
+                    spawnWarning(boss.x, boss.y, 40, "rgba(255,80,0,0.4)");
+
+                    setTimeout(() => {
+                        const len = Math.hypot(dx, dy) || 1;
+                        spawnFireball(
+                            boss.x,
+                            boss.y,
+                            (dx / len) * FIREBALL_SPEED,
+                            (dy / len) * FIREBALL_SPEED
+                        );
+                        boss._ai.state = "idle";
+                    }, WARNING_TIME);
+                }
+
+                // DASH (short range)
+                if (dist < 160 && now - boss._ai.lastDash > DASH_COOLDOWN) {
+                    boss._ai.lastDash = now;
+                    boss._ai.state = "dash";
+
+                    spawnWarning(boss.x, boss.y, 30, "rgba(255,0,0,0.35)");
+
+                    setTimeout(() => {
+                        const len = Math.hypot(dx, dy) || 1;
+                        boss.vx = (dx / len) * DASH_SPEED;
+                        boss.vy = (dy / len) * DASH_SPEED;
+                        boss._ai.state = "idle";
+                    }, WARNING_TIME);
+                }
+            }
+
+            // PATCH GAME LOOP
+            const _origUpdate = window.updateGame;
+            window.updateGame = function () {
+                _origUpdate();
+
+                const boss = enemies.find(e => e.isBoss);
+                if (boss && window.player) {
+                    updateBossAbilities(boss, player);
+                }
+
+                // UPDATE PROJECTILES
+                bossProjectiles = bossProjectiles.filter(p => {
+                    if (p.warning) return performance.now() - p.t < WARNING_TIME;
+                    p.x += p.vx;
+                    p.y += p.vy;
+
+                    const dx = p.x - player.x;
+                    const dy = p.y - player.y;
+                    if (Math.hypot(dx, dy) < p.r + 12) {
+                        player.hp -= FIREBALL_DAMAGE;
+                        return false;
+                    }
+                    return true;
+                });
+            };
+
+            // PATCH RENDER
+            const _origRender = window.renderGame;
+            window.renderGame = function () {
+                _origRender();
+                const ctx = window.ctx;
+                bossProjectiles.forEach(p => {
+                    ctx.beginPath();
+                    ctx.fillStyle = p.color || "orange";
+                    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            };
+        })();
+    </script>
+
 </body>
 
 </html>
