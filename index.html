@@ -414,6 +414,7 @@
             display: none;
             z-index: 100;
             pointer-events: none;
+            box-sizing: border-box;
         }
 
         .hud-top {
@@ -421,6 +422,8 @@
             justify-content: space-between;
             align-items: flex-start;
             margin-bottom: 1rem;
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .health-bar-container {
@@ -429,6 +432,7 @@
             padding: 0.5rem 1rem;
             min-width: 300px;
             box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
+            box-sizing: border-box;
         }
 
         .health-label {
@@ -468,6 +472,7 @@
         .stats-container {
             display: flex;
             gap: 1rem;
+            box-sizing: border-box;
         }
 
         .stat-box {
@@ -477,6 +482,7 @@
             text-align: center;
             min-width: 120px;
             box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
+            box-sizing: border-box;
         }
 
         .stat-label {
@@ -500,6 +506,7 @@
             margin-top: 1rem;
             max-width: 500px;
             box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
+            box-sizing: border-box;
         }
 
         .xp-label {
@@ -946,12 +953,16 @@
                 width: 100%;
                 justify-content: space-between;
                 gap: 0.3rem;
+                box-sizing: border-box;
+                max-width: 100%;
             }
 
             .stat-box {
                 min-width: 0;
                 flex: 1;
                 padding: 0.3rem 0.4rem;
+                box-sizing: border-box;
+                overflow: hidden;
             }
 
             .stat-label {
@@ -964,8 +975,10 @@
 
             .xp-bar-container {
                 max-width: 100%;
+                width: 100%;
                 padding: 0.3rem 0.5rem;
                 margin-top: 0.3rem;
+                box-sizing: border-box;
             }
 
             .xp-label {
@@ -1097,18 +1110,23 @@
             .health-bar-container {
                 min-width: 100%;
                 max-width: 100%;
+                width: 100%;
+                box-sizing: border-box;
             }
 
             .stats-container {
                 flex-direction: row;
                 width: 100%;
+                max-width: 100%;
                 justify-content: space-between;
                 gap: 0.5rem;
+                box-sizing: border-box;
             }
 
             .stat-box {
                 min-width: 0;
                 flex: 1;
+                box-sizing: border-box;
             }
 
             /* Joystick */
