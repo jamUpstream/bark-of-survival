@@ -1225,16 +1225,10 @@
 
             /* In-game HUD order: Health -> XP -> Timer/Level/Kills */
             #hud {
-                left: 0;
-                right: 0;
+                left: 50%;
                 top: calc(1rem + env(safe-area-inset-top));
-                margin-left: auto;
-                margin-right: auto;
-                transform: none;
+                transform: translateX(-50%);
                 width: min(520px, calc(100vw - 2rem - env(safe-area-inset-left) - env(safe-area-inset-right)));
-                max-width: calc(100vw - 2rem - env(safe-area-inset-left) - env(safe-area-inset-right));
-                will-change: auto;
-
             }
 
             .hud-top {
@@ -1771,6 +1765,51 @@
         const TIME_SCALE = 0.80;  // global pacing (lower = slower)
 
         function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+        // Mobile-only play boundary to prevent viewport/DOM jitter when traveling too far
+        const MOBILE_PLAY_BOUNDS = { w: 1000, h: 1000 }; // in world pixels
+        let IS_MOBILE = window.matchMedia('(max-width: 600px)').matches;
+
+        function updateDeviceFlags() {
+            IS_MOBILE = window.matchMedia('(max-width: 600px)').matches;
+        }
+        window.addEventListener('resize', updateDeviceFlags, { passive: true });
+
+        function getPlayBounds() {
+            // Default: whole world
+            let minX = 0, minY = 0, maxX = WORLD.w, maxY = WORLD.h;
+
+            // Mobile: constrain to a centered box
+            if (IS_MOBILE) {
+                const bw = Math.min(MOBILE_PLAY_BOUNDS.w, WORLD.w);
+                const bh = Math.min(MOBILE_PLAY_BOUNDS.h, WORLD.h);
+                minX = (WORLD.w - bw) / 2;
+                minY = (WORLD.h - bh) / 2;
+                maxX = minX + bw;
+                maxY = minY + bh;
+            }
+            return { minX, minY, maxX, maxY };
+        }
+
+        function clampCameraToBounds() {
+            const b = getPlayBounds();
+
+            // Clamp camera so the viewport stays within bounds.
+            // If bounds are smaller than the viewport, lock camera to bounds center.
+            const halfW = canvas.width / 2;
+            const halfH = canvas.height / 2;
+
+            const minCamX = b.minX + halfW;
+            const maxCamX = b.maxX - halfW;
+            const minCamY = b.minY + halfH;
+            const maxCamY = b.maxY - halfH;
+
+            if (minCamX > maxCamX) camera.x = (b.minX + b.maxX) / 2;
+            else camera.x = clamp(camera.x, minCamX, maxCamX);
+
+            if (minCamY > maxCamY) camera.y = (b.minY + b.maxY) / 2;
+            else camera.y = clamp(camera.y, minCamY, maxCamY);
+        }
 
         // Tileset helper
         function tileToSrc(tileIndex) {
@@ -2817,6 +2856,8 @@
             camera.x += (player.x - camera.x) * CAMERA_LERP;
             camera.y += (player.y - camera.y) * CAMERA_LERP;
 
+
+            clampCameraToBounds();
             // World transform
             ctx.setTransform(1, 0, 0, 1, canvas.width / 2 - camera.x, canvas.height / 2 - camera.y);
 
@@ -2914,8 +2955,9 @@
                 player.y += dy * player.moveSpeed * dt;
 
                 // Keep player in bounds
-                player.x = clamp(player.x, player.radius, WORLD.w - player.radius);
-                player.y = clamp(player.y, player.radius, Math.min(WORLD.h - player.radius, player.y));
+                const pb = getPlayBounds();
+                player.x = clamp(player.x, pb.minX + player.radius, pb.maxX - player.radius);
+                player.y = clamp(player.y, pb.minY + player.radius, pb.maxY - player.radius);
             }
 
             // Update boomerangs
