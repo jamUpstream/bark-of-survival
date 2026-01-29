@@ -3,7 +3,8 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Bark of Survival</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@400;700&family=Rajdhani:wght@400;600;700&display=swap');
@@ -31,6 +32,78 @@
             overflow: hidden;
             cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><circle cx="10" cy="10" r="4" fill="rgba(212,175,55,0.6)"/></svg>') 10 10, auto;
         }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overscroll-behavior: none;
+        }
+
+        /* Mobile stability / safe-area */
+        body {
+            -webkit-text-size-adjust: 100%;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: none;
+            overscroll-behavior: none;
+        }
+
+        #canvasWrap {
+            width: 100vw;
+            height: calc(var(--vh, 1vh) * 100);
+        }
+
+        #gameCanvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        #hud {
+            padding-top: calc(1rem + env(safe-area-inset-top));
+            padding-left: calc(1rem + env(safe-area-inset-left));
+            padding-right: calc(1rem + env(safe-area-inset-right));
+        }
+
+        #mainMenu,
+        #characterSelect,
+        #shop,
+        #options,
+        #levelUpScreen,
+        #gameOverScreen,
+        #victoryScreen {
+            padding-top: calc(2rem + env(safe-area-inset-top));
+            padding-left: calc(2rem + env(safe-area-inset-left));
+            padding-right: calc(2rem + env(safe-area-inset-right));
+            padding-bottom: calc(2rem + env(safe-area-inset-bottom));
+        }
+
+        /* Prevent huge UI on narrow phones */
+        @media (max-width: 520px) {
+            .health-bar-container {
+                min-width: 220px;
+            }
+
+            .stat-box {
+                min-width: 90px;
+                padding: 0.4rem 0.6rem;
+            }
+
+            .stat-value {
+                font-size: 1.4rem;
+            }
+
+            .xp-bar-container {
+                max-width: 92vw;
+            }
+
+            .back-btn {
+                top: calc(1rem + env(safe-area-inset-top));
+                left: calc(1rem + env(safe-area-inset-left));
+            }
+        }
+
+
 
         #gameCanvas {
             display: block;
@@ -80,6 +153,10 @@
             margin-bottom: 1rem;
             letter-spacing: 0.2rem;
             animation: titleGlow 2s ease-in-out infinite alternate;
+
+            text-align: center;
+            width: min(92vw, 520px);
+            line-height: 1.05;
         }
 
         @keyframes titleGlow {
@@ -99,6 +176,9 @@
             margin-bottom: 3rem;
             letter-spacing: 0.5rem;
             text-transform: uppercase;
+
+            text-align: center;
+            width: min(92vw, 520px);
         }
 
         .menu-buttons {
@@ -276,16 +356,17 @@
 
         .back-btn {
             position: fixed;
-            top: 2rem;
-            left: 2rem;
+            top: calc(1rem + env(safe-area-inset-top));
+            left: calc(1rem + env(safe-area-inset-left));
+            z-index: 3000;
             font-family: 'Bebas Neue', cursive;
             font-size: 1.5rem;
-            padding: 0.5rem 2rem;
-            background: var(--stone-gray);
+            padding: 0.55rem 1.4rem;
+            background: rgba(44, 44, 44, 0.95);
             border: 2px solid var(--gold);
             color: var(--gold);
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
         }
 
         .back-btn:hover {
@@ -677,6 +758,239 @@
         .dom-sprite.flip {
             transform: translate(-50%, -50%) scaleX(-1);
         }
+
+        /* Mobile Virtual Joystick */
+        #mobileControls {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 200px;
+            pointer-events: none;
+            z-index: 200;
+        }
+
+        #joystickContainer {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 140px;
+            height: 140px;
+            display: none;
+            z-index: 2500;
+            pointer-events: none;
+        }
+
+        #joystickBase {
+            position: absolute;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(212, 175, 55, 0.3) 0%, rgba(212, 175, 55, 0.1) 70%, transparent 100%);
+            border: 3px solid rgba(212, 175, 55, 0.5);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(212, 175, 55, 0.2);
+        }
+
+        #joystickStick {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(212, 175, 55, 0.9) 0%, rgba(139, 0, 0, 0.7) 100%);
+            border: 3px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.7), 0 0 10px rgba(212, 175, 55, 0.8);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            transition: none;
+        }
+
+        #joystickStick.active {
+            transform: translate(-50%, -50%) scale(1.1);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.9), 0 0 20px rgba(212, 175, 55, 1);
+        }
+
+        /* Mobile responsive adjustments */
+        @media (max-width: 768px) {
+            #mobileControls {
+                display: block;
+            }
+
+            body {
+                overscroll-behavior: none;
+                -webkit-user-select: none;
+                user-select: none;
+            }
+
+            #gameCanvas {
+                touch-action: none;
+            }
+
+            .game-title {
+                font-size: 3.5rem;
+            }
+
+            .game-subtitle {
+                font-size: 1.2rem;
+            }
+
+            .menu-btn {
+                font-size: 1.5rem;
+                padding: 0.8rem 2rem;
+            }
+
+            .char-select-title,
+            .shop-title {
+                font-size: 2rem;
+            }
+
+            .character-card {
+                padding: 1.5rem;
+            }
+
+            .char-name {
+                font-size: 1.5rem;
+            }
+
+            .levelup-title {
+                font-size: 2rem;
+            }
+
+            .upgrade-card {
+                padding: 1rem;
+            }
+
+            .upgrade-name {
+                font-size: 1.2rem;
+            }
+
+            #hud {
+                padding: 0.5rem;
+            }
+
+            .hud-top {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+
+            .stats-container {
+                flex-direction: row;
+                width: 100%;
+                justify-content: space-between;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .game-title {
+                font-size: 2.5rem;
+            }
+
+            .characters-grid {
+                grid-template-columns: 1fr;
+                padding: 1rem;
+            }
+
+            .upgrades-grid {
+                grid-template-columns: 1fr;
+            }
+
+            #joystickContainer {
+                width: 120px;
+                height: 120px;
+                bottom: 15px;
+                left: 15px;
+            }
+
+            #joystickBase {
+                width: 120px;
+                height: 120px;
+            }
+
+            #joystickStick {
+                width: 50px;
+                height: 50px;
+            }
+        }
+
+        /* Prevent text selection on mobile */
+        * {
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* --- Mobile/Tablet UI fixes (does NOT affect desktop) --- */
+        @media (max-width: 900px) {
+
+            /* Keep panels clear of the back button */
+            #shop,
+            #characterSelect,
+            #options {
+                padding-top: calc(6.25rem + env(safe-area-inset-top));
+            }
+
+            /* In-game HUD order: Health -> XP -> Timer/Level/Kills */
+            #hud {
+                left: 50%;
+                top: calc(1rem + env(safe-area-inset-top));
+                transform: translateX(-50%);
+                width: min(520px, calc(100vw - 2rem - env(safe-area-inset-left) - env(safe-area-inset-right)));
+            }
+
+            .hud-top {
+                display: contents;
+            }
+
+            .health-bar-container {
+                grid-area: health;
+            }
+
+            .xp-bar-container {
+                grid-area: xp;
+            }
+
+            .stats-container {
+                grid-area: stats;
+            }
+
+            #hud {
+                display: grid !important;
+                grid-template-areas:
+                    "health"
+                    "xp"
+                    "stats";
+                gap: 0.75rem;
+            }
+
+            .stats-container {
+                width: 100%;
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 0.6rem;
+            }
+
+            /* Defeated UI polish */
+            #gameOverScreen .game-over-content,
+            #victoryScreen .game-over-content {
+                width: min(420px, calc(100vw - 2rem));
+                margin: 0 auto;
+                padding: 0 0.75rem;
+            }
+
+            #gameOverScreen .game-over-title {
+                font-size: 3rem;
+                letter-spacing: 0.08em;
+            }
+        }
+
+        /* Tablet tuning */
+        @media (min-width: 901px) and (max-width: 1200px) {
+            #hud {
+                left: 1.25rem;
+                top: 1.25rem;
+                width: 520px;
+            }
+        }
     </style>
 </head>
 
@@ -958,6 +1272,14 @@
     <div id="canvasWrap" style="position:relative; width:100%; height:100%;">
         <canvas id="gameCanvas"></canvas>
         <div id="spriteOverlay"></div>
+    </div>
+
+    <!-- Mobile Controls -->
+    <div id="mobileControls">
+        <div id="joystickContainer">
+            <div id="joystickBase"></div>
+            <div id="joystickStick"></div>
+        </div>
     </div>
 
     <!-- HUD -->
@@ -1308,12 +1630,27 @@
 
 
         // Make canvas fullscreen
-        function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+        function setVhUnit() {
+            // Fix 100vh issues on mobile browsers (address bar / toolbars)
+            const vh = window.innerHeight * 0.01;
+            document.documentElement.style.setProperty('--vh', `${vh}px`);
         }
+
+        function resizeCanvas() {
+            setVhUnit();
+            const w = Math.max(1, Math.floor(window.innerWidth));
+            const h = Math.max(1, Math.floor(window.innerHeight));
+            canvas.width = w;
+            canvas.height = h;
+        }
+
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 200));
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', resizeCanvas);
+            window.visualViewport.addEventListener('scroll', resizeCanvas);
+        }
 
         // Sprite loading system
         const sprites = {
@@ -1481,26 +1818,128 @@
             mouseY = e.clientY - rect.top;
         });
 
-        canvas.addEventListener('touchstart', e => {
+        canvas.addEventListener('touchstart', (e) => {
+            // Prevent page scrolling / pull-to-refresh while playing
+            e.preventDefault();
             touching = true;
             const rect = canvas.getBoundingClientRect();
             const touch = e.touches[0];
             mouseX = touch.clientX - rect.left;
             mouseY = touch.clientY - rect.top;
-        });
+        }, { passive: false });
 
-        canvas.addEventListener('touchmove', e => {
+        canvas.addEventListener('touchmove', (e) => {
             e.preventDefault();
             const rect = canvas.getBoundingClientRect();
             const touch = e.touches[0];
             mouseX = touch.clientX - rect.left;
             mouseY = touch.clientY - rect.top;
-        });
+        }, { passive: false });
 
         canvas.addEventListener('touchend', () => {
             touching = false;
         });
 
+        // Virtual Joystick for Mobile
+        const joystick = {
+            active: false,
+            startX: 0,
+            startY: 0,
+            currentX: 0,
+            currentY: 0,
+            deltaX: 0,
+            deltaY: 0,
+            maxDistance: 50
+        };
+
+        const joystickContainer = document.getElementById('joystickContainer');
+        const joystickStick = document.getElementById('joystickStick');
+
+        // Floating joystick (touch): appears where you touch, not locked to a corner
+        if (joystickContainer && joystickStick) {
+            const JOY_SIZE = 140;
+            const JOY_RADIUS = JOY_SIZE / 2;
+
+            function showJoystickAt(x, y) {
+                joystickContainer.style.display = 'block';
+                joystickContainer.style.left = (x - JOY_RADIUS) + 'px';
+                joystickContainer.style.top = (y - JOY_RADIUS) + 'px';
+                joystick.startX = x;
+                joystick.startY = y;
+                joystickStick.classList.add('active');
+                joystickStick.style.left = '50%';
+                joystickStick.style.top = '50%';
+            }
+
+            function hideJoystick() {
+                joystick.active = false;
+                joystick.deltaX = 0;
+                joystick.deltaY = 0;
+                joystick.currentX = 0;
+                joystick.currentY = 0;
+                joystickStick.classList.remove('active');
+                joystickContainer.style.display = 'none';
+                joystickStick.style.left = '50%';
+                joystickStick.style.top = '50%';
+            }
+
+            function updateJoystickFromTouch(touch) {
+                const dx = touch.clientX - joystick.startX;
+                const dy = touch.clientY - joystick.startY;
+
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const angle = Math.atan2(dy, dx);
+                const limitedDistance = Math.min(distance, joystick.maxDistance);
+
+                joystick.currentX = Math.cos(angle) * limitedDistance;
+                joystick.currentY = Math.sin(angle) * limitedDistance;
+
+                joystick.deltaX = joystick.currentX / joystick.maxDistance;
+                joystick.deltaY = joystick.currentY / joystick.maxDistance;
+
+                joystickStick.style.left = `calc(50% + ${joystick.currentX}px)`;
+                joystickStick.style.top = `calc(50% + ${joystick.currentY}px)`;
+            }
+
+            // Use document-level listeners so the joystick can start anywhere (left half by default)
+            document.addEventListener('touchstart', (e) => {
+                if (gameState.screen !== 'playing') return;
+                if (!e.touches || !e.touches.length) return;
+
+                const t = e.touches[0];
+
+                // Only allow joystick start on left half of the screen
+                if (t.clientX > window.innerWidth * 0.6) return;
+
+                // Ignore touches on UI buttons/panels
+                const target = e.target;
+                if (target && (target.closest && target.closest('button, .btn, .upgrade-card, .character-card, .shop-item, .options-panel'))) {
+                    return;
+                }
+
+                e.preventDefault();
+                joystick.active = true;
+                touching = false;
+                showJoystickAt(t.clientX, t.clientY);
+            }, { passive: false });
+
+            document.addEventListener('touchmove', (e) => {
+                if (gameState.screen !== 'playing') return;
+                if (!joystick.active) return;
+                if (!e.touches || !e.touches.length) return;
+
+                e.preventDefault();
+                updateJoystickFromTouch(e.touches[0]);
+            }, { passive: false });
+
+            document.addEventListener('touchend', (e) => {
+                if (joystick.active) hideJoystick();
+            }, { passive: true });
+
+            document.addEventListener('touchcancel', (e) => {
+                if (joystick.active) hideJoystick();
+            }, { passive: true });
+        }
         // Enemies
         const enemies = [];
 
@@ -1742,6 +2181,12 @@
             document.getElementById('characterSelect').style.display = 'none';
             document.getElementById('mainMenu').style.display = 'none';
             document.getElementById('hud').style.display = 'block';
+
+            // Show mobile controls if on mobile device
+            const mobileControls = document.getElementById('mobileControls');
+            if (mobileControls && window.innerWidth <= 768) {
+                mobileControls.style.display = 'block';
+            }
 
             // Hard reset runtime state so restarts don't inherit previous run
             document.getElementById('gameOverScreen').style.display = 'none';
@@ -2123,13 +2568,20 @@
 
             // Can't move when dead
             if (!player.dead) {
+                // Keyboard controls
                 if (keys['w'] || keys['arrowup']) dy -= 1;
                 if (keys['s'] || keys['arrowdown']) dy += 1;
                 if (keys['a'] || keys['arrowleft']) dx -= 1;
                 if (keys['d'] || keys['arrowright']) dx += 1;
 
-                // Touch/mouse movement
-                if (touching || keys[' ']) {
+                // Virtual joystick (mobile)
+                if (joystick.active) {
+                    dx += joystick.deltaX;
+                    dy += joystick.deltaY;
+                }
+
+                // Touch/mouse movement (fallback for non-joystick touch)
+                if ((touching || keys[' ']) && !joystick.active) {
                     const tdx = mouseX - player.x;
                     const tdy = mouseY - player.y;
                     const dist = Math.sqrt(tdx * tdx + tdy * tdy);
@@ -2877,6 +3329,12 @@
             document.getElementById('hud').style.display = 'none';
             document.getElementById('gameOverScreen').style.display = 'flex';
 
+            // Hide mobile controls
+            const mobileControls = document.getElementById('mobileControls');
+            if (mobileControls) {
+                mobileControls.style.display = 'none';
+            }
+
             // Calculate rewards - 1 bone per kill only (harder economy)
             const bonesEarned = player.kills;
             gameState.currency += bonesEarned;
@@ -2895,6 +3353,12 @@
             gameState.screen = 'victory';
             document.getElementById('hud').style.display = 'none';
             document.getElementById('victoryScreen').style.display = 'flex';
+
+            // Hide mobile controls
+            const mobileControls = document.getElementById('mobileControls');
+            if (mobileControls) {
+                mobileControls.style.display = 'none';
+            }
 
             // Calculate rewards - 2x bones for victory (2 per kill)
             const bonesEarned = player.kills * 2;
