@@ -697,6 +697,18 @@
             }
         }
 
+        @keyframes toastPulse {
+
+            0%,
+            100% {
+                transform: translate(-50%, -50%) scale(1);
+            }
+
+            50% {
+                transform: translate(-50%, -50%) scale(1.05);
+            }
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
             .game-title {
@@ -1832,341 +1844,6 @@
         }
 
         // Draw visible world tiles (called every frame)
-
-        // --- Retro Alley procedural tiles (no external assets) ---
-        // Set to true to use the procedural alley look instead of the image tileset.
-        const RETRO_ALLEY_MODE = true;
-
-        const ALLEY_STYLE = {
-            // widths are in tiles
-            roadHalfWidth: 10,        // center road half-width (total road width = roadHalfWidth*2)
-            sidewalkWidth: 6,         // sidewalk per side, adjacent to road
-            wallWidth: 3              // outer "building edge" band
-        };
-
-        function hash2i(x, y) {
-            // deterministic pseudo-random in [0,1)
-            let n = (x * 374761393) ^ (y * 668265263);
-            n = (n ^ (n >>> 13)) * 1274126177;
-            n = (n ^ (n >>> 16)) >>> 0;
-            return (n & 0xffffffff) / 4294967296;
-        }
-
-        function drawRetroTile(tx, ty, wx, wy) {
-            const centerX = Math.floor(MAP_W / 2);
-            const dx = tx - centerX;
-
-            const r = hash2i(tx, ty);
-            const r2 = hash2i(tx + 91, ty - 37);
-
-            // bands: wall | sidewalk | road | sidewalk | wall
-            const absDx = Math.abs(dx);
-            const road = absDx <= ALLEY_STYLE.roadHalfWidth;
-            const sidewalk = (!road) && (absDx <= (ALLEY_STYLE.roadHalfWidth + ALLEY_STYLE.sidewalkWidth));
-            const wall = (!road && !sidewalk) && (absDx <= (ALLEY_STYLE.roadHalfWidth + ALLEY_STYLE.sidewalkWidth + ALLEY_STYLE.wallWidth));
-
-            // base colors (kept dark so your gold HUD stays readable)
-            let base = '#0b0f14';       // deep asphalt
-            let accent = '#101821';
-            if (road) { base = (r < 0.18) ? '#0a0d12' : '#0b1017'; accent = '#0f1822'; }
-            else if (sidewalk) { base = (r < 0.20) ? '#101418' : '#0f1317'; accent = '#141a21'; }
-            else if (wall) { base = (r < 0.25) ? '#141216' : '#121015'; accent = '#1a151c'; }
-            else { base = (r < 0.25) ? '#0a0a0a' : '#0b0b0b'; accent = '#111'; }
-
-            // Fill base
-            ctx.fillStyle = base;
-            ctx.fillRect(wx, wy, TILE_PX, TILE_PX);
-
-            // gritty noise specks (cheap pixel texture)
-            const specks = 5 + Math.floor(r2 * 6);
-            for (let i = 0; i < specks; i++) {
-                const sx = wx + Math.floor(hash2i(tx + i * 7, ty + 11) * TILE_PX);
-                const sy = wy + Math.floor(hash2i(tx + 19, ty + i * 5) * TILE_PX);
-                const a = 0.12 + hash2i(tx + i * 3, ty + i * 9) * 0.18;
-                ctx.fillStyle = `rgba(255,255,255,${a})`;
-                ctx.fillRect(sx, sy, 1, 1);
-            }
-
-            // Road lane line (subtle dashed)
-            if (road) {
-                const lane = (dx === 0) || (dx === -1);
-                if (lane && (ty % 4 !== 0)) {
-                    ctx.fillStyle = 'rgba(212,175,55,0.08)';
-                    ctx.fillRect(wx + Math.floor(TILE_PX * 0.48), wy + 4, 2, TILE_PX - 8);
-                }
-                // occasional manhole / drain
-                if (r < 0.035) {
-                    ctx.strokeStyle = 'rgba(200,200,200,0.18)';
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.arc(wx + TILE_PX * 0.5, wy + TILE_PX * 0.55, TILE_PX * 0.18, 0, Math.PI * 2);
-                    ctx.stroke();
-                    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-                    ctx.beginPath();
-                    ctx.arc(wx + TILE_PX * 0.5, wy + TILE_PX * 0.55, TILE_PX * 0.14, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-                // rare puddle (neon-ish)
-                if (r > 0.965) {
-                    ctx.fillStyle = 'rgba(80,200,255,0.10)';
-                    ctx.beginPath();
-                    ctx.ellipse(wx + TILE_PX * 0.55, wy + TILE_PX * 0.62, TILE_PX * 0.28, TILE_PX * 0.16, 0.2, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.strokeStyle = 'rgba(180,210,255,0.18)';
-                    ctx.lineWidth = 1;
-                    ctx.stroke();
-                }
-            }
-
-            // Sidewalk seams (grid)
-            if (sidewalk) {
-                ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-                ctx.lineWidth = 1;
-                // vertical seam
-                if ((tx + ty) % 2 === 0) {
-                    ctx.beginPath();
-                    ctx.moveTo(wx + TILE_PX * 0.5, wy + 2);
-                    ctx.lineTo(wx + TILE_PX * 0.5, wy + TILE_PX - 2);
-                    ctx.stroke();
-                }
-                // horizontal seam
-                if (ty % 2 === 0) {
-                    ctx.beginPath();
-                    ctx.moveTo(wx + 2, wy + TILE_PX * 0.5);
-                    ctx.lineTo(wx + TILE_PX - 2, wy + TILE_PX * 0.5);
-                    ctx.stroke();
-                }
-
-                // curb edge next to road
-                const curbEdge = (absDx === (ALLEY_STYLE.roadHalfWidth + 1));
-                if (curbEdge) {
-                    ctx.strokeStyle = 'rgba(212,175,55,0.14)';
-                    ctx.lineWidth = 2;
-                    const x = dx > 0 ? wx : (wx + TILE_PX);
-                    ctx.beginPath();
-                    ctx.moveTo(x, wy);
-                    ctx.lineTo(x, wy + TILE_PX);
-                    ctx.stroke();
-                }
-            }
-
-            // Wall band: brick-ish pattern + occasional neon sign strip
-            if (wall) {
-                // brick lines
-                ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-                ctx.lineWidth = 1;
-                const row = ty % 3;
-                const offset = (row === 1) ? TILE_PX * 0.25 : 0;
-                for (let i = 0; i < 3; i++) {
-                    const y = wy + (i + 1) * (TILE_PX / 4);
-                    ctx.beginPath();
-                    ctx.moveTo(wx + 2, y);
-                    ctx.lineTo(wx + TILE_PX - 2, y);
-                    ctx.stroke();
-                }
-                for (let i = 0; i < 2; i++) {
-                    const x = wx + offset + (i + 1) * (TILE_PX / 3);
-                    ctx.beginPath();
-                    ctx.moveTo(x, wy + 2);
-                    ctx.lineTo(x, wy + TILE_PX - 2);
-                    ctx.stroke();
-                }
-
-                // neon strip very rarely
-                if (r < 0.02) {
-                    ctx.fillStyle = 'rgba(255,80,200,0.10)';
-                    ctx.fillRect(wx + 4, wy + 6, TILE_PX - 8, 4);
-                    ctx.fillStyle = 'rgba(80,200,255,0.08)';
-                    ctx.fillRect(wx + 6, wy + 14, TILE_PX - 12, 3);
-                }
-            }
-
-            // outer area: darker fade
-            if (!road && !sidewalk && !wall) {
-                ctx.fillStyle = 'rgba(0,0,0,0.25)';
-                ctx.fillRect(wx, wy, TILE_PX, TILE_PX);
-            }
-
-            // micro shadow at tile bottom (gives depth)
-            ctx.fillStyle = 'rgba(0,0,0,0.10)';
-            ctx.fillRect(wx, wy + TILE_PX - 3, TILE_PX, 3);
-        }
-
-
-        // --- Retro Alley extras: variation decals, parallax layers, and faux platforms ---
-        // Tile-level decals & platform accents (visual only)
-        function drawAlleyTileDecals(tx, ty, wx, wy) {
-            // deterministic rarity per-tile
-            const r = hash2i(tx, ty);
-            // curb highlight where sidewalk meets road
-            const centerX = Math.floor(MAP_W / 2);
-            const dx = Math.abs(tx - centerX);
-            const roadEdge = ALLEY_STYLE.roadHalfWidth;
-            const onCurb = (dx === roadEdge);
-            if (onCurb) {
-                ctx.strokeStyle = 'rgba(240, 210, 80, 0.10)';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.moveTo(wx + 1, wy + 1);
-                ctx.lineTo(wx + 1, wy + TILE_PX - 1);
-                ctx.stroke();
-            }
-
-            // rare crate/platform marking (visual only)
-            if (r < 0.012) {
-                const inset = 10;
-                ctx.save();
-                ctx.translate(wx + TILE_PX / 2, wy + TILE_PX / 2);
-                const rot = (hash2i(tx + 99, ty - 77) - 0.5) * 0.35;
-                ctx.rotate(rot);
-                ctx.translate(-TILE_PX / 2, -TILE_PX / 2);
-
-                ctx.fillStyle = 'rgba(0,0,0,0.18)';
-                ctx.fillRect(inset + 4, inset + 10, TILE_PX - inset * 2, TILE_PX - inset * 2);
-
-                ctx.strokeStyle = 'rgba(220, 200, 120, 0.22)';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(inset, inset, TILE_PX - inset * 2, TILE_PX - inset * 2);
-
-                // diagonal plank lines
-                ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.moveTo(inset + 6, inset + 6);
-                ctx.lineTo(TILE_PX - inset - 6, TILE_PX - inset - 6);
-                ctx.moveTo(inset + 6, TILE_PX - inset - 6);
-                ctx.lineTo(TILE_PX - inset - 6, inset + 6);
-                ctx.stroke();
-                ctx.restore();
-            }
-
-            // puddle glint (adds depth, breaks repetition)
-            if (r >= 0.012 && r < 0.05) {
-                ctx.save();
-                ctx.globalAlpha = 0.55;
-                const px = wx + 10 + hash2i(tx + 7, ty + 3) * (TILE_PX - 20);
-                const py = wy + 10 + hash2i(tx - 5, ty + 11) * (TILE_PX - 20);
-                const pr = 10 + hash2i(tx + 31, ty - 17) * 16;
-                const g = ctx.createRadialGradient(px, py, 2, px, py, pr);
-                g.addColorStop(0, 'rgba(120,190,255,0.22)');
-                g.addColorStop(1, 'rgba(120,190,255,0.00)');
-                ctx.fillStyle = g;
-                ctx.beginPath();
-                ctx.ellipse(px, py, pr * 1.25, pr * 0.75, 0, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
-            }
-        }
-
-        // Back layer: wall/building hints (slow parallax)
-        function drawAlleyBackLayer() {
-            if (!RETRO_ALLEY_MODE) return;
-            const par = 0.22;
-            ctx.save();
-            ctx.setTransform(1, 0, 0, 1, canvas.width / 2 - camera.x * par, canvas.height / 2 - camera.y * par);
-
-            // draw subtle vertical wall columns in view bounds
-            const viewW = canvas.width / par + 400;
-            const viewH = canvas.height / par + 400;
-            const left = camera.x * par - (canvas.width / 2) + -200;
-            const top = camera.y * par - (canvas.height / 2) + -200;
-
-            ctx.globalAlpha = 0.35;
-            for (let i = 0; i < 26; i++) {
-                const x = (Math.floor((left + i * 180) / 180) * 180);
-                const w = 60 + (hash2i(i, 9) * 30);
-                const grad = ctx.createLinearGradient(x, top, x + w, top);
-                grad.addColorStop(0, 'rgba(70,80,110,0.10)');
-                grad.addColorStop(1, 'rgba(10,10,20,0.00)');
-                ctx.fillStyle = grad;
-                ctx.fillRect(x, top, w, viewH);
-            }
-
-            // occasional neon strip
-            ctx.globalAlpha = 0.25;
-            for (let k = 0; k < 10; k++) {
-                const nx = Math.floor((left + k * 420) / 420) * 420 + 120;
-                const ny = Math.floor((top + k * 260) / 260) * 260 + 80;
-                ctx.fillStyle = 'rgba(255, 80, 200, 0.14)';
-                ctx.fillRect(nx, ny, 140, 2);
-                ctx.fillStyle = 'rgba(80, 220, 255, 0.10)';
-                ctx.fillRect(nx + 18, ny + 8, 110, 2);
-            }
-
-            ctx.restore();
-        }
-
-        // Fore layer: grime / scanlines (slightly faster than floor)
-        function drawAlleyForeLayer() {
-            if (!RETRO_ALLEY_MODE) return;
-            // screen-space overlay (very subtle)
-            ctx.save();
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-            // soft grime vignettes
-            ctx.globalAlpha = 0.18;
-            for (let i = 0; i < 6; i++) {
-                const rx = (i * 173 + (performance.now() * 0.02)) % (canvas.width + 200) - 100;
-                const ry = (i * 211 + (performance.now() * 0.017)) % (canvas.height + 200) - 100;
-                const r = 220 + (i * 40);
-                const g = ctx.createRadialGradient(rx, ry, 10, rx, ry, r);
-                g.addColorStop(0, 'rgba(0,0,0,0.10)');
-                g.addColorStop(1, 'rgba(0,0,0,0.00)');
-                ctx.fillStyle = g;
-                ctx.beginPath();
-                ctx.arc(rx, ry, r, 0, Math.PI * 2);
-                ctx.fill();
-            }
-
-            // faint scanlines
-            ctx.globalAlpha = 0.07;
-            ctx.fillStyle = 'rgba(0,0,0,1)';
-            for (let y = 0; y < canvas.height; y += 4) {
-                ctx.fillRect(0, y, canvas.width, 1);
-            }
-
-            ctx.restore();
-        }
-
-        // Player-follow light (replaces static center vignette)
-        function drawPlayerLighting(dt) {
-            // pulse decays over time
-            if (!gameState.lightPulse) gameState.lightPulse = 0;
-            gameState.lightPulse = Math.max(0, gameState.lightPulse - dt * 1.6);
-
-            const px = canvas.width / 2 + (player.x - camera.x);
-            const py = canvas.height / 2 + (player.y - camera.y);
-
-            ctx.save();
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-            // Darkness layer
-            ctx.fillStyle = 'rgba(0,0,0,0.28)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            // Light hole
-            const pulse = gameState.lightPulse;
-            const inner = 70 + pulse * 50;
-            const outer = Math.max(canvas.width, canvas.height) * (0.62 + pulse * 0.08);
-            const g = ctx.createRadialGradient(px, py, inner, px, py, outer);
-            g.addColorStop(0, 'rgba(0,0,0,0.0)');
-            g.addColorStop(0.55, 'rgba(0,0,0,0.18)');
-            g.addColorStop(1, 'rgba(0,0,0,0.62)');
-            ctx.fillStyle = g;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            // subtle player glow
-            ctx.globalAlpha = 0.22;
-            const g2 = ctx.createRadialGradient(px, py, 10, px, py, 120 + pulse * 40);
-            g2.addColorStop(0, 'rgba(180,220,255,0.22)');
-            g2.addColorStop(1, 'rgba(180,220,255,0)');
-            ctx.fillStyle = g2;
-            ctx.beginPath();
-            ctx.arc(px, py, 140, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.restore();
-        }
         function drawTiles() {
             // View bounds in world coords
             const left = camera.x - canvas.width / 2;
@@ -2183,10 +1860,7 @@
                     const wx = tx * TILE_PX;
                     const wy = ty * TILE_PX;
 
-                    if (RETRO_ALLEY_MODE) {
-                        drawRetroTile(tx, ty, wx, wy);
-                        drawAlleyTileDecals(tx, ty, wx, wy);
-                    } else if (tilesetReady) {
+                    if (tilesetReady) {
                         const { sx, sy } = tileToSrc(tileIndex);
                         ctx.drawImage(
                             tileset,
@@ -2269,14 +1943,6 @@
             img.style.width = '0px';
             img.style.height = '0px';
             img.style.transform = 'translate(-50%, -50%)';
-
-            img.style.objectFit = 'contain';
-            // fallback backdrop/outline improves readability even if GIF fails to load
-            img.style.background = 'radial-gradient(circle at 40% 35%, rgba(200,230,255,0.18), rgba(0,0,0,0.35) 60%, rgba(0,0,0,0.0) 72%)';
-            img.style.borderRadius = '50%';
-            img.style.outline = '2px solid rgba(180,210,255,0.18)';
-            img.style.boxShadow = '0 0 0 6px rgba(0,0,0,0.25)';
-
             spriteOverlay.appendChild(img);
             enemyDomImgs.set(enemy.id, img);
             return img;
@@ -2488,174 +2154,109 @@
             dead: false
         };
 
-        // Advanced Sound System with Improved SFX
+
+        // Advanced Sound System
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         const audioCtx = new AudioContext();
 
         const sounds = {
             playPunch: () => {
-                const osc = audioCtx.createOscillator();
-                const osc2 = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                const filter = audioCtx.createBiquadFilter();
-
-                osc.connect(filter);
-                osc2.connect(filter);
-                filter.connect(gain);
-                gain.connect(audioCtx.destination);
-
-                // Deep bass punch with impact
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.1);
-
-                // Add sub-bass for more impact
-                osc2.type = 'sine';
-                osc2.frequency.setValueAtTime(60, audioCtx.currentTime);
-                osc2.frequency.exponentialRampToValueAtTime(20, audioCtx.currentTime + 0.08);
-
-                filter.type = 'lowpass';
-                filter.frequency.value = 500;
-
-                gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
-
-                osc.start();
-                osc2.start();
-                osc.stop(audioCtx.currentTime + 0.12);
-                osc2.stop(audioCtx.currentTime + 0.12);
+                try {
+                    const osc = audioCtx.createOscillator();
+                    const osc2 = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain); osc2.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.1);
+                    osc2.type = 'sine';
+                    osc2.frequency.setValueAtTime(60, audioCtx.currentTime);
+                    osc2.frequency.exponentialRampToValueAtTime(20, audioCtx.currentTime + 0.08);
+                    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+                    osc.start(); osc2.start();
+                    osc.stop(audioCtx.currentTime + 0.12);
+                    osc2.stop(audioCtx.currentTime + 0.12);
+                } catch (e) { }
             },
-
             playArrow: () => {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                const filter = audioCtx.createBiquadFilter();
-
-                osc.connect(filter);
-                filter.connect(gain);
-                gain.connect(audioCtx.destination);
-
-                // Whoosh sound with air release
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.2);
-
-                filter.type = 'bandpass';
-                filter.frequency.setValueAtTime(2000, audioCtx.currentTime);
-                filter.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.2);
-                filter.Q.value = 3;
-
-                gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
-
-                osc.start();
-                osc.stop(audioCtx.currentTime + 0.2);
+                try {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    const filter = audioCtx.createBiquadFilter();
+                    osc.connect(filter); filter.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.2);
+                    filter.type = 'bandpass';
+                    filter.frequency.setValueAtTime(2000, audioCtx.currentTime);
+                    filter.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.2);
+                    filter.Q.value = 3;
+                    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.2);
+                } catch (e) { }
             },
-
             playSwordSlash: () => {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                const filter = audioCtx.createBiquadFilter();
-
-                osc.connect(filter);
-                filter.connect(gain);
-                gain.connect(audioCtx.destination);
-
-                // Sharp metallic slash
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(800, audioCtx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.1);
-
-                filter.type = 'highpass';
-                filter.frequency.setValueAtTime(800, audioCtx.currentTime);
-                filter.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.1);
-                filter.Q.value = 5;
-
-                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-
-                osc.start();
-                osc.stop(audioCtx.currentTime + 0.1);
+                try {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    const filter = audioCtx.createBiquadFilter();
+                    osc.connect(filter); filter.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.1);
+                    filter.type = 'highpass';
+                    filter.frequency.setValueAtTime(800, audioCtx.currentTime);
+                    filter.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.1);
+                    filter.Q.value = 5;
+                    gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.1);
+                } catch (e) { }
             },
-
             playOrbPickup: () => {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-
-                // Pleasant chime
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(1320, audioCtx.currentTime + 0.15);
-
-                gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
-
-                osc.start();
-                osc.stop(audioCtx.currentTime + 0.15);
+                try {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain); gain.connect(audioCtx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(1320, audioCtx.currentTime + 0.15);
+                    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.15);
+                } catch (e) { }
             },
-
             playUltimate: () => {
-                const osc = audioCtx.createOscillator();
-                const osc2 = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-
-                osc.connect(gain);
-                osc2.connect(gain);
-                gain.connect(audioCtx.destination);
-
-                // Power-up sound
-                osc.type = 'square';
-                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.4);
-
-                osc2.type = 'sine';
-                osc2.frequency.setValueAtTime(300, audioCtx.currentTime);
-                osc2.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.4);
-
-                gain.gain.setValueAtTime(0.35, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
-
-                osc.start();
-                osc2.start();
-                osc.stop(audioCtx.currentTime + 0.4);
-                osc2.stop(audioCtx.currentTime + 0.4);
-            },
-
-            playExplosion: () => {
-                const noise = audioCtx.createBufferSource();
-                const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.3, audioCtx.sampleRate);
-                const output = noiseBuffer.getChannelData(0);
-                for (let i = 0; i < noiseBuffer.length; i++) {
-                    output[i] = Math.random() * 2 - 1;
-                }
-                noise.buffer = noiseBuffer;
-
-                const filter = audioCtx.createBiquadFilter();
-                const gain = audioCtx.createGain();
-
-                noise.connect(filter);
-                filter.connect(gain);
-                gain.connect(audioCtx.destination);
-
-                filter.type = 'lowpass';
-                filter.frequency.setValueAtTime(1000, audioCtx.currentTime);
-                filter.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.3);
-
-                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
-
-                noise.start();
-                noise.stop(audioCtx.currentTime + 0.3);
+                try {
+                    const osc = audioCtx.createOscillator();
+                    const osc2 = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain); osc2.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.4);
+                    osc2.type = 'sine';
+                    osc2.frequency.setValueAtTime(300, audioCtx.currentTime);
+                    osc2.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.4);
+                    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                    osc.start(); osc2.start();
+                    osc.stop(audioCtx.currentTime + 0.4);
+                    osc2.stop(audioCtx.currentTime + 0.4);
+                } catch (e) { }
             }
         };
 
-        // Boss Fireballs Array
         const bossFireballs = [];
-
-        // Ultimate Effects Array
         const ultimateEffects = [];
 
         // Input handling
@@ -2868,13 +2469,19 @@
             { name: 'Berserker', description: '+10 Damage, -10 Max HP', apply: (p) => { p.damage += 10; p.maxHealth -= 10; p.health = Math.min(p.health, p.maxHealth); } },
             { name: 'Multi-Strike', description: 'Fire 5 projectiles in spread', apply: (p) => { p.upgrades.push('multishot'); } },
             { name: 'Bloodlust', description: '+2% damage per kill', apply: (p) => { p.upgrades.push('bloodlust'); } },
-            { name: 'Haste', description: '+25% Movement Speed', apply: (p) => { p.moveSpeed *= 1.25; } },
-            { name: 'Armor', description: 'Reduce damage by 10%', apply: (p) => { p.armor = (p.armor || 0) + 0.1; } },
-            { name: 'XP Magnet', description: 'Attract XP from farther', apply: (p) => { p.upgrades.push('magnet'); } },
-            { name: 'Thorns', description: 'Reflect 20% damage', apply: (p) => { p.thorns = (p.thorns || 0) + 0.2; } },
-            { name: 'Lucky', description: 'Better upgrade choices', apply: (p) => { p.upgrades.push('lucky'); } },
-            { name: 'Knockback', description: 'Push enemies back', apply: (p) => { p.upgrades.push('knockback'); } },
-            { name: 'Frenzy', description: '+5% attack speed per kill', apply: (p) => { p.upgrades.push('frenzy'); } }
+            // NEW UPGRADES AND PASSIVES
+            { name: 'Thorns', description: 'Reflect 25% damage to attackers', apply: (p) => { p.upgrades.push('thorns'); } },
+            { name: 'Dodge Master', description: '15% chance to dodge attacks', apply: (p) => { p.upgrades.push('dodge'); } },
+            { name: 'Burning Rage', description: 'Attacks burn enemies for 3s', apply: (p) => { p.upgrades.push('burn'); } },
+            { name: 'Frost Touch', description: 'Slow enemies by 30% for 2s', apply: (p) => { p.upgrades.push('frost'); } },
+            { name: 'Chain Lightning', description: 'Attacks jump to nearby foes', apply: (p) => { p.upgrades.push('chain'); } },
+            { name: 'Fortified', description: '+15% Damage Reduction', apply: (p) => { p.damageReduction = (p.damageReduction || 0) + 0.15; } },
+            { name: 'Lucky Strike', description: '+10% Critical Chance', apply: (p) => { p.critBonus = (p.critBonus || 0) + 0.1; } },
+            { name: 'XP Magnet', description: '+50% XP pickup range', apply: (p) => { p.magnetRange = (p.magnetRange || 1) * 1.5; } },
+            { name: 'Treasure Hunter', description: 'Enemies drop 30% more XP', apply: (p) => { p.xpBonus = (p.xpBonus || 1) * 1.3; } },
+            { name: 'Iron Will', description: '+40 Max Health', apply: (p) => { p.maxHealth += 40; p.health += 40; } },
+            { name: 'Fury', description: '+10 Damage', apply: (p) => { p.damage += 10; } },
+            { name: 'Lightning Speed', description: '+25% Movement Speed', apply: (p) => { p.moveSpeed *= 1.25; } },
         ];
 
         // Menu functions
@@ -2882,6 +2489,37 @@
             document.getElementById('mainMenu').style.display = 'none';
             document.getElementById('characterSelect').style.display = 'block';
             updateCharacterCards();
+        }
+
+        // Toast notification system for warnings
+        function showToastNotification(message, color = '#d4af37') {
+            const toast = document.createElement('div');
+            toast.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(0, 0, 0, 0.95);
+                border: 3px solid ${color};
+                padding: 2rem 3rem;
+                font-family: 'Bebas Neue', cursive;
+                font-size: 2.5rem;
+                color: ${color};
+                text-shadow: 0 0 20px ${color};
+                z-index: 9999;
+                pointer-events: none;
+                text-align: center;
+                box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
+                animation: toastPulse 0.5s ease-in-out;
+            `;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.5s';
+                setTimeout(() => toast.remove(), 500);
+            }, 2500);
         }
 
         function showShop() {
@@ -3108,12 +2746,16 @@
             player.projectileSpeed = char.projectileSpeed;
             player.xp = 0;
             player.level = 1;
-            player.xpToNext = 100;
+            player.xpToNext = 30; // First level is very easy - only 3 kills needed!
             player.kills = 0;
             player.character = char;
             player.upgrades = [];
             player.boomerangs = [];
             player.shield = 0;
+            player.armor = 0;
+            player.thorns = 0;
+            player.lastUltimate = performance.now();
+            player.ultimateReady = false;
             player.lastAttack = 0;
             player.animState = 'idle';
             player.animStateTimer = 0;
@@ -3124,6 +2766,28 @@
             player.health = player.maxHealth;
             player.damage += gameState.permanentUpgrades.damage * 3;
             player.moveSpeed *= (1 + gameState.permanentUpgrades.speed * 0.05);
+
+            // DYNAMIC DIFFICULTY SYSTEM
+            // Calculate difficulty multiplier based on character power and shop upgrades
+            let difficultyMultiplier = 1.0;
+
+            // Character-based difficulty (ranged characters are easier, so increase difficulty)
+            if (char.type === 'archer') {
+                difficultyMultiplier += 0.25; // Luna is ranged and fast - increase difficulty
+            } else if (char.type === 'swordsman') {
+                difficultyMultiplier += 0.15; // Blade is balanced - slight increase
+            }
+            // Rex (brawler) keeps base difficulty as he's melee and tankier
+
+            // Shop upgrade difficulty scaling
+            const totalUpgrades = Object.values(gameState.permanentUpgrades).reduce((a, b) => a + b, 0);
+            if (totalUpgrades > 0) {
+                // Each shop upgrade increases difficulty by 3%
+                difficultyMultiplier += totalUpgrades * 0.03;
+            }
+
+            // Store difficulty multiplier for use in enemy spawning
+            player.difficultyMultiplier = difficultyMultiplier;
 
             // Clear arrays
             enemies.length = 0;
@@ -3144,10 +2808,10 @@
         }
 
         function updateHUD() {
-            // Health
-            const healthPercent = (player.health / player.maxHealth) * 100;
+            // Health (clamp to 0 minimum to prevent negative display)
+            const healthPercent = Math.max(0, (player.health / player.maxHealth) * 100);
             document.getElementById('healthFill').style.width = healthPercent + '%';
-            document.getElementById('healthText').textContent = Math.ceil(player.health) + '/' + player.maxHealth;
+            document.getElementById('healthText').textContent = Math.max(0, Math.ceil(player.health)) + '/' + player.maxHealth;
 
             // Timer
             const minutes = Math.floor(gameTimer / 60);
@@ -3176,11 +2840,34 @@
             x = clamp(x, 40, WORLD.w - 40);
             y = clamp(y, 40, WORLD.h - 40);
 
-            const isBoss = Math.random() < 0.04; // 4% chance for boss (slightly rarer)
-
-            // Gentle difficulty ramp over time (avoids early overwhelm)
+            // PROGRESSIVE DIFFICULTY SCALING
+            // Combined difficulty ramp: time-based + player power-based
             const minutesSurvived = (300 - gameTimer) / 60;
-            const ramp = 1 + Math.min(1.6, minutesSurvived * 0.12); // up to ~2.6x
+
+            // Boss spawning - only after 1 minute of survival
+            const canSpawnBoss = minutesSurvived >= 1.0; // Bosses only spawn after 1 minute
+            const isBoss = canSpawnBoss && Math.random() < 0.04; // 4% chance for boss (only after 1 min)
+
+            // Time-based scaling: more aggressive as game progresses
+            // 0 min = 1.0x, 1 min = 1.3x, 3 min = 2.0x, 5 min = 3.0x+
+            const timeRamp = 1 + Math.min(2.5, minutesSurvived * 0.4); // up to ~3.5x over 5 minutes
+
+            // Apply player difficulty multiplier (based on character + shop upgrades)
+            const difficultyRamp = timeRamp * (player.difficultyMultiplier || 1.0);
+
+            // Additional health scaling as survival time increases (enemies get tankier)
+            const survivalBonus = 1 + (minutesSurvived * 0.15); // +15% health per minute
+            const finalHealthMultiplier = difficultyRamp * survivalBonus;
+
+            // ENHANCED ENEMY BEHAVIORS - assign behavior type
+            let behavior = 'chase'; // default
+            const rand = Math.random();
+            if (!isBoss) {
+                if (rand < 0.15) behavior = 'zigzag'; // 15% zigzag
+                else if (rand < 0.28) behavior = 'circler'; // 13% circler
+                else if (rand < 0.38) behavior = 'rusher'; // 10% rusher
+                else if (rand < 0.45) behavior = 'retreater'; // 7% retreater (hit and run)
+            }
 
             enemies.push({
                 x,
@@ -3191,16 +2878,30 @@
                 dead: false,
                 deadTimer: 0,
                 radius: isBoss ? 36 : 26,
-                health: (isBoss ? 70 : 16) * ramp,
-                maxHealth: (isBoss ? 70 : 16) * ramp,
-                damage: (isBoss ? 10 : 3) * ramp,
-                speed: (isBoss ? 82 : 112) * (0.9 + Math.random() * 0.25), // px/s
+                health: (isBoss ? 70 : 16) * finalHealthMultiplier,
+                maxHealth: (isBoss ? 70 : 16) * finalHealthMultiplier,
+                damage: (isBoss ? 10 : 3) * difficultyRamp,
+                speed: (isBoss ? 82 : 112) * (0.9 + Math.random() * 0.25) * Math.min(1.3, 1 + (player.difficultyMultiplier - 1) * 0.5), // Speed increases slightly with difficulty
                 isBoss,
+                behavior, // NEW: behavior type
+                behaviorTimer: 0, // NEW: for behavior timing
+                circleAngle: Math.random() * Math.PI * 2, // NEW: for circler
+                zigzagPhase: 0, // NEW: for zigzag
                 facingRight: true, // Will be updated based on movement
                 // IMPORTANT: used by render (missing this makes floatY NaN -> ghost not drawn)
                 floatSpeed: (isBoss ? 1.35 : 1.7) + Math.random() * 0.9,
                 floatOffset: Math.random() * Math.PI * 2,
-                wobbleSeed: Math.random() * 9999
+                wobbleSeed: Math.random() * 9999,
+                dashCooldown: isBoss ? 5000 : 0,
+                lastDash: 0,
+                isDashing: false,
+                dashSpeed: 300,
+                dashDuration: 0.5,
+                dashTimer: 0,
+                dashDirX: 0,
+                dashDirY: 0,
+                fireballCooldown: isBoss ? 3000 : 0,
+                lastFireball: 0
             });
         }
 
@@ -3215,8 +2916,45 @@
             });
         }
 
+
+
+        function updateActiveUpgrades() {
+            const upgradeList = document.getElementById('upgradeList');
+            const activeDiv = document.getElementById('activeUpgrades');
+
+            if (!upgradeList || !activeDiv) return;
+
+            const activeUpgrades = [];
+            const upgradeNames = {
+                'lifesteal': 'Life Steal', 'doubleshot': 'Double Shot', 'multishot': 'Multi-Strike',
+                'pierce': 'Piercing', 'crit': 'Critical', 'regen': 'Regeneration',
+                'vampire': 'Vampiric', 'explosion': 'Explosive', 'bloodlust': 'Bloodlust',
+                'magnet': 'XP Magnet', 'lucky': 'Lucky', 'knockback': 'Knockback', 'frenzy': 'Frenzy'
+            };
+
+            player.upgrades.forEach(upgrade => {
+                if (upgradeNames[upgrade]) activeUpgrades.push(upgradeNames[upgrade]);
+            });
+
+            if (player.boomerangs && player.boomerangs.length > 0) {
+                activeUpgrades.push(`Boomerangs x${player.boomerangs.length}`);
+            }
+
+            if (player.shield > 0) {
+                activeUpgrades.push(`Shield: ${Math.floor(player.shield)}`);
+            }
+
+            if (activeUpgrades.length > 0) {
+                activeDiv.style.display = 'block';
+                upgradeList.innerHTML = activeUpgrades.map(u => `• ${u}`).join('<br>');
+            } else {
+                activeDiv.style.display = 'none';
+            }
+        }
+
         function levelUp() {
-            gameState.lightPulse = 1;
+
+            try { playSfx('levelup'); } catch (e) { }
             gameState.screen = 'levelup';
             document.getElementById('levelUpScreen').style.display = 'flex';
 
@@ -3239,8 +2977,6 @@
             });
         }
 
-
-
         function selectUpgrade(upgrade) {
             upgrade.apply(player);
             document.getElementById('levelUpScreen').style.display = 'none';
@@ -3249,9 +2985,6 @@
 
             // Resume game loop immediately
             ctx.setTransform(1, 0, 0, 1, 0, 0);
-            // Foreground grime/scanlines (screen-space)
-            drawAlleyForeLayer();
-
             requestAnimationFrame(gameLoop);
         }
 
@@ -3313,7 +3046,7 @@
 
                 // Double Shot + Multi-Strike stacking (works for ALL ranged characters)
                 const dsLevel = player.upgrades.filter(u => u === 'doubleshot').length;
-                const msLevel = player.upgrades.filter(u => u === 'tripleshot').length;
+                const msLevel = player.upgrades.filter(u => u === 'multishot').length;
 
                 // Strike count rules:
                 // - Double Shot alone => 2
@@ -3328,25 +3061,42 @@
                 }
 
                 // Direction rules:
-                // - Double Shot: same direction (fires twice)
-                // - Multi-Strike: spreads across 3 directions; extras repeat center
+                // - Double Shot: same direction (fires twice with delay)
+                // - Multi-Strike: spreads in multiple directions
                 if (strikes > 1) {
                     const spread = 0.25;
                     const offsets = [];
                     if (msLevel > 0) {
-                        offsets.push(-spread, 0, spread);
-                        while (offsets.length < strikes) offsets.push(0);
+                        // Multi-Strike: fire in 8 directions for true multi-directional
+                        const directions = 8;
+                        for (let i = 0; i < directions; i++) {
+                            const angle = (Math.PI * 2 / directions) * i;
+                            shootProjectile(angle - Math.atan2(nearest.y - player.y, nearest.x - player.x));
+                        }
                     } else {
-                        // Double Shot only
+                        // Double Shot only - fire with delay
                         offsets.push(0);
                         while (offsets.length < strikes) offsets.push(0);
+                        for (let i = 0; i < offsets.length; i++) {
+                            if (i === 0) {
+                                shootProjectile(offsets[i]);
+                            } else {
+                                // Delay subsequent shots by 150ms each
+                                setTimeout(() => {
+                                    shootProjectile(offsets[i]);
+                                    try {
+                                        if (player.name === 'Luna') playSfx('arrow');
+                                        else playSfx('shoot');
+                                    } catch (e) { }
+                                }, i * 150);
+                            }
+                        }
                     }
-                    for (let i = 0; i < offsets.length; i++) shootProjectile(offsets[i]);
                 }
             } else {
                 // Melee strikes (already confirmed in range)
                 const dsLevel = player.upgrades.filter(u => u === 'doubleshot').length;
-                const msLevel = player.upgrades.filter(u => u === 'tripleshot').length;
+                const msLevel = player.upgrades.filter(u => u === 'multishot').length;
 
                 let strikes = 1;
                 if (msLevel > 0) {
@@ -3355,48 +3105,104 @@
                     strikes = 2;
                 }
 
-                const baseAngle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
-                const spread = 0.55; // wider for melee cone selection
-                const offsets = [];
                 if (msLevel > 0) {
-                    offsets.push(-spread, 0, spread);
-                    while (offsets.length < strikes) offsets.push(0);
-                } else if (dsLevel > 0) {
-                    offsets.push(0);
-                    while (offsets.length < strikes) offsets.push(0);
-                } else {
-                    offsets.push(0);
-                }
+                    // Multi-Strike for melee: attack in 8 directions
+                    const directions = 8;
+                    for (let dir = 0; dir < directions; dir++) {
+                        const angle = (Math.PI * 2 / directions) * dir;
+                        const targetX = player.x + Math.cos(angle) * player.attackRange;
+                        const targetY = player.y + Math.sin(angle) * player.attackRange;
 
-                const pickTargetForAngle = (targetAngle) => {
-                    let best = null;
-                    let bestScore = Infinity;
-                    for (const e of enemies) {
-                        if (!e || e.dead) continue;
-                        const ex = e.x - player.x;
-                        const ey = e.y - player.y;
-                        const d = Math.hypot(ex, ey);
-                        if (d > player.attackRange + e.radius) continue;
-                        const a = Math.atan2(ey, ex);
-                        let da = Math.abs(a - targetAngle);
-                        da = Math.min(da, Math.PI * 2 - da);
-                        // score favors close + direction match
-                        const score = da * 3 + d * 0.02;
-                        if (score < bestScore) { bestScore = score; best = e; }
+                        // Find enemy in this direction
+                        let target = null;
+                        let bestDist = Infinity;
+                        for (const e of enemies) {
+                            if (!e || e.dead) continue;
+                            const ex = e.x - player.x;
+                            const ey = e.y - player.y;
+                            const d = Math.hypot(ex, ey);
+                            if (d > player.attackRange + e.radius) continue;
+                            const a = Math.atan2(ey, ex);
+                            let da = Math.abs(a - angle);
+                            da = Math.min(da, Math.PI * 2 - da);
+                            if (da < 0.6 && d < bestDist) {
+                                bestDist = d;
+                                target = e;
+                            }
+                        }
+
+                        if (target) {
+                            let damage = player.damage;
+                            if (player.upgrades.includes('crit') && Math.random() < 0.2) {
+                                damage *= 2;
+                                try { playSfx('crit'); } catch (e) { }
+                            }
+                            target.health -= damage;
+                            if (target.health <= 0) {
+                                markEnemyDead(target);
+                            }
+
+                            // Create slash effect
+                            slashEffects.push({
+                                x: player.x,
+                                y: player.y,
+                                angle: angle,
+                                range: player.attackRange,
+                                lifetime: 0.3,
+                                age: 0
+                            });
+                        }
                     }
-                    return best || nearest;
-                };
 
-                for (let s = 0; s < offsets.length; s++) {
-                    const t = pickTargetForAngle(baseAngle + offsets[s]);
-                    if (!t) continue;
+                    // Play sound once for multi-strike
+                    try {
+                        if (player.name === 'Blade') playSfx('sword');
+                        else if (player.name === 'Rex') playSfx('punch');
+                        else playSfx('slash');
+                    } catch (e) { }
+                } else {
+                    // Double-shot or single strike
+                    const baseAngle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
 
-                    let damage = player.damage;
-                    if (player.upgrades.includes('crit') && Math.random() < 0.2) { damage *= 2; try { playSfx('crit'); } catch (e) { } }
+                    const performStrike = (strikeIndex) => {
+                        const target = nearest;
+                        if (!target || target.dead) return;
 
-                    t.health -= damage;
-                    if (t.health <= 0) {
-                        markEnemyDead(t);
+                        let damage = player.damage;
+                        if (player.upgrades.includes('crit') && Math.random() < 0.2) {
+                            damage *= 2;
+                            try { playSfx('crit'); } catch (e) { }
+                        }
+
+                        target.health -= damage;
+                        if (target.health <= 0) {
+                            markEnemyDead(target);
+                        }
+
+                        // Play strike sound
+                        try {
+                            if (player.name === 'Blade') playSfx('sword');
+                            else if (player.name === 'Rex') playSfx('punch');
+                            else playSfx('slash');
+                        } catch (e) { }
+
+                        // Create slash effect
+                        slashEffects.push({
+                            x: player.x,
+                            y: player.y,
+                            angle: baseAngle,
+                            range: player.attackRange,
+                            lifetime: 0.3,
+                            age: 0
+                        });
+                    };
+
+                    // First strike immediate
+                    performStrike(0);
+
+                    // Additional strikes with delay (double-shot)
+                    for (let s = 1; s < strikes; s++) {
+                        setTimeout(() => performStrike(s), s * 150);
                     }
                 }
 
@@ -3420,7 +3226,7 @@
                         const dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
 
                         if (dist2 < 60) {
-                            nearbyEnemy.health -= damage * 0.5;
+                            nearbyEnemy.health -= player.damage * 0.5;
                             nearbyEnemy.hurtTimer = 0.18;
                             if (nearbyEnemy.health <= 0) {
                                 markEnemyDead(nearbyEnemy);
@@ -3428,22 +3234,6 @@
                         }
                     });
                 }
-
-                // Create slash effect for melee
-                const angle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
-                try {
-                    if (player.name === 'Blade') playSfx('sword');
-                    else if (player.name === 'Rex') playSfx('punch');
-                    else playSfx('slash');
-                } catch (e) { }
-                slashEffects.push({
-                    x: player.x,
-                    y: player.y,
-                    angle: angle,
-                    range: player.attackRange,
-                    lifetime: 0.3,
-                    age: 0
-                });
             }
         }
 
@@ -3455,6 +3245,80 @@
             enemy.hurtTimer = 0;
             // rewards & XP
             handleEnemyDeath(enemy);
+        }
+
+        function castUltimate() {
+            if (!player.character) return;
+
+            sounds.playUltimate();
+            player.lastUltimate = performance.now();
+            player.ultimateReady = false;
+
+            const type = player.character.type;
+
+            if (type === 'brawler') {
+                // Rex ultimate - Shockwave
+                ultimateEffects.push({
+                    type: 'shockwave',
+                    x: player.x,
+                    y: player.y,
+                    radius: 0,
+                    maxRadius: 300,
+                    lifetime: 1.5,
+                    age: 0
+                });
+
+                enemies.forEach(enemy => {
+                    const dx = enemy.x - player.x;
+                    const dy = enemy.y - player.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 300) {
+                        enemy.health -= 50;
+                        if (enemy.health <= 0) markEnemyDead(enemy);
+                    }
+                });
+            }
+
+            if (type === 'archer') {
+                // Luna ultimate - Arrow Storm
+                let volleyCount = 0;
+                const volleyInterval = setInterval(() => {
+                    if (volleyCount >= 3 || player.dead) {
+                        clearInterval(volleyInterval);
+                        return;
+                    }
+
+                    sounds.playArrow();
+                    for (let i = 0; i < 12; i++) {
+                        const angle = (Math.PI * 2 * i) / 12;
+                        projectiles.push({
+                            x: player.x,
+                            y: player.y,
+                            vx: Math.cos(angle) * 400,
+                            vy: Math.sin(angle) * 400,
+                            radius: 8,
+                            damage: player.damage * 1.5,
+                            range: 500,
+                            traveled: 0,
+                            pierce: true
+                        });
+                    }
+                    volleyCount++;
+                }, 300);
+            }
+
+            if (type === 'swordsman') {
+                // Blade ultimate - Whirlwind Slash
+                ultimateEffects.push({
+                    type: 'tornado',
+                    x: player.x,
+                    y: player.y,
+                    radius: 80,
+                    lifetime: 2,
+                    age: 0,
+                    rotation: 0
+                });
+            }
         }
 
         function handleEnemyDeath(enemy) {
@@ -3477,11 +3341,287 @@
                 player.damage *= 1.02;
             }
 
-            // Spawn XP
-            const xpValue = enemy.isBoss ? 50 : 10;
+            // Spawn XP - Event bosses give HUGE XP rewards!
+            let xpValue = 10; // Normal enemy
+            if (enemy.isEventBoss) {
+                // Event bosses give massive XP based on their event number
+                xpValue = 100 + (enemy.eventNumber * 50); // 150, 200, 250, 300 XP
+                showToastNotification(`💀 EVENT BOSS DEFEATED! +${xpValue} XP! 💀`, '#d4af37');
+            } else if (enemy.isBoss) {
+                xpValue = 50; // Regular boss
+            }
             spawnXPOrb(enemy.x, enemy.y, xpValue);
 
             updateHUD();
+        }
+
+        // SPECIAL BOSS EVENT SYSTEM
+        function triggerBossEvent(minuteRemaining) {
+            const now = performance.now();
+
+            // Spawn a special boss enemy for each event
+            const minutesSurvived = (300 - gameTimer) / 60;
+            const difficultyRamp = (1 + Math.min(2.5, minutesSurvived * 0.4)) * (player.difficultyMultiplier || 1.0);
+
+            switch (minuteRemaining) {
+                case 4:
+                    // 4 minutes left - Spiral Boss
+                    showToastNotification('⚠️ BOSS EVENT: SPIRAL DEMON! ⚠️', '#ff0000');
+                    try { playSfx('warn'); } catch (e) { }
+                    setTimeout(() => {
+                        spawnEventBoss(4, difficultyRamp);
+                        spawnSpiralFireballs();
+                    }, 2000);
+                    break;
+
+                case 3:
+                    // 3 minutes left - Cross Boss
+                    showToastNotification('⚠️ BOSS EVENT: CROSSFIRE DEMON! ⚠️', '#ff0000');
+                    try { playSfx('warn'); } catch (e) { }
+                    setTimeout(() => {
+                        spawnEventBoss(3, difficultyRamp);
+                        spawnCrossFireballs();
+                    }, 2000);
+                    break;
+
+                case 2:
+                    // 2 minutes left - Wave Boss
+                    showToastNotification('⚠️ BOSS EVENT: TSUNAMI DEMON! ⚠️', '#ff0000');
+                    try { playSfx('warn'); } catch (e) { }
+                    setTimeout(() => {
+                        spawnEventBoss(2, difficultyRamp);
+                        spawnWaveFireballs();
+                    }, 2000);
+                    break;
+
+                case 1:
+                    // 1 minute left - FINAL BOSS
+                    showToastNotification('🔥 FINAL BOSS: INFERNO OVERLORD! 🔥', '#ff0000');
+                    try { playSfx('warn'); } catch (e) { }
+                    setTimeout(() => {
+                        spawnEventBoss(1, difficultyRamp);
+                        spawnCircleOfDoom();
+                    }, 2000);
+                    break;
+            }
+        }
+
+        // Spawn special event boss enemy
+        function spawnEventBoss(eventNumber, difficultyRamp) {
+            // Spawn near player but not too close
+            const spawnDist = 350;
+            const ang = Math.random() * Math.PI * 2;
+            let x = player.x + Math.cos(ang) * spawnDist;
+            let y = player.y + Math.sin(ang) * spawnDist;
+
+            // Clamp to world bounds
+            x = clamp(x, 40, WORLD.w - 40);
+            y = clamp(y, 40, WORLD.h - 40);
+
+            // Boss stats scale with event number (later bosses are stronger)
+            const baseHealth = 150 + (eventNumber * 50); // 200, 250, 300, 350
+            const baseDamage = 12 + (eventNumber * 3); // 15, 18, 21, 24
+            const bossSpeed = 70 + (eventNumber * 10); // 80, 90, 100, 110
+
+            enemies.push({
+                x,
+                y,
+                id: 'boss' + eventNumber + '_' + (enemyIdSeq++),
+                spriteScale: 1.2, // Larger than normal bosses
+                hurtTimer: 0,
+                dead: false,
+                deadTimer: 0,
+                radius: 45, // Bigger radius
+                health: baseHealth * difficultyRamp,
+                maxHealth: baseHealth * difficultyRamp,
+                damage: baseDamage * difficultyRamp,
+                speed: bossSpeed,
+                isBoss: true,
+                isEventBoss: true, // Mark as special event boss
+                eventNumber: eventNumber,
+                behavior: 'chase',
+                behaviorTimer: 0,
+                circleAngle: Math.random() * Math.PI * 2,
+                zigzagPhase: 0,
+                facingRight: true,
+                floatSpeed: 1.2 + Math.random() * 0.5,
+                floatOffset: Math.random() * Math.PI * 2,
+                wobbleSeed: Math.random() * 9999,
+                dashCooldown: 4000,
+                lastDash: 0,
+                isDashing: false,
+                dashSpeed: 350,
+                dashDuration: 0.6,
+                dashTimer: 0,
+                dashDirX: 0,
+                dashDirY: 0,
+                fireballCooldown: 2000, // Faster fireball attacks
+                lastFireball: 0
+            });
+        }
+
+        // Boss Event 1: Spiral Fireballs (4 min remaining)
+        function spawnSpiralFireballs() {
+            let angle = 0;
+            const spiralCount = 40;
+            const spiralInterval = setInterval(() => {
+                if (gameState.screen !== 'playing' || spiralCount <= 0) {
+                    clearInterval(spiralInterval);
+                    return;
+                }
+
+                for (let i = 0; i < 3; i++) {
+                    const offsetAngle = angle + (Math.PI * 2 / 3) * i;
+                    const distance = 400;
+                    const x = player.x + Math.cos(offsetAngle) * distance;
+                    const y = player.y + Math.sin(offsetAngle) * distance;
+
+                    bossFireballs.push({
+                        x: x,
+                        y: y,
+                        vx: -Math.cos(offsetAngle) * 150,
+                        vy: -Math.sin(offsetAngle) * 150,
+                        radius: 15,
+                        damage: 15,
+                        lifetime: 5
+                    });
+                }
+
+                angle += 0.3;
+            }, 200);
+        }
+
+        // Boss Event 2: Cross Fireballs (3 min remaining)
+        function spawnCrossFireballs() {
+            let waveCount = 0;
+            const maxWaves = 5;
+            const crossInterval = setInterval(() => {
+                if (gameState.screen !== 'playing' || waveCount >= maxWaves) {
+                    clearInterval(crossInterval);
+                    return;
+                }
+
+                // Horizontal line
+                for (let i = -3; i <= 3; i++) {
+                    bossFireballs.push({
+                        x: player.x + i * 80,
+                        y: player.y - 400,
+                        vx: 0,
+                        vy: 180,
+                        radius: 15,
+                        damage: 15,
+                        lifetime: 5
+                    });
+                }
+
+                // Vertical line
+                for (let i = -3; i <= 3; i++) {
+                    bossFireballs.push({
+                        x: player.x - 400,
+                        y: player.y + i * 80,
+                        vx: 180,
+                        vy: 0,
+                        radius: 15,
+                        damage: 15,
+                        lifetime: 5
+                    });
+                }
+
+                waveCount++;
+            }, 800);
+        }
+
+        // Boss Event 3: Wave Fireballs (2 min remaining)
+        function spawnWaveFireballs() {
+            let waveCount = 0;
+            const maxWaves = 8;
+            const waveInterval = setInterval(() => {
+                if (gameState.screen !== 'playing' || waveCount >= maxWaves) {
+                    clearInterval(waveInterval);
+                    return;
+                }
+
+                const side = waveCount % 4; // 0=top, 1=right, 2=bottom, 3=left
+
+                for (let i = 0; i < 8; i++) {
+                    let x, y, vx, vy;
+
+                    if (side === 0) { // Top
+                        x = player.x - 300 + i * 75;
+                        y = player.y - 400;
+                        vx = 0;
+                        vy = 160;
+                    } else if (side === 1) { // Right
+                        x = player.x + 400;
+                        y = player.y - 300 + i * 75;
+                        vx = -160;
+                        vy = 0;
+                    } else if (side === 2) { // Bottom
+                        x = player.x - 300 + i * 75;
+                        y = player.y + 400;
+                        vx = 0;
+                        vy = -160;
+                    } else { // Left
+                        x = player.x - 400;
+                        y = player.y - 300 + i * 75;
+                        vx = 160;
+                        vy = 0;
+                    }
+
+                    bossFireballs.push({
+                        x: x,
+                        y: y,
+                        vx: vx,
+                        vy: vy,
+                        radius: 15,
+                        damage: 15,
+                        lifetime: 5
+                    });
+                }
+
+                waveCount++;
+            }, 600);
+        }
+
+        // Boss Event 4: Circle of Doom (1 min remaining) - Player trapped in middle
+        function spawnCircleOfDoom() {
+            showToastNotification('🔥 DODGE THE INCOMING FIREBALLS! 🔥', '#ff6600');
+
+            let phase = 0;
+            const maxPhases = 15;
+            const doomInterval = setInterval(() => {
+                if (gameState.screen !== 'playing' || phase >= maxPhases) {
+                    clearInterval(doomInterval);
+                    return;
+                }
+
+                // Spawn fireballs in a circle around player
+                const numFireballs = 16;
+                const radius = 450;
+
+                for (let i = 0; i < numFireballs; i++) {
+                    const angle = (Math.PI * 2 / numFireballs) * i + (phase * 0.3);
+                    const x = player.x + Math.cos(angle) * radius;
+                    const y = player.y + Math.sin(angle) * radius;
+
+                    // Fire towards player with slight randomness
+                    const targetAngle = Math.atan2(player.y - y, player.x - x);
+                    const randomOffset = (Math.random() - 0.5) * 0.3;
+
+                    bossFireballs.push({
+                        x: x,
+                        y: y,
+                        vx: Math.cos(targetAngle + randomOffset) * 140,
+                        vy: Math.sin(targetAngle + randomOffset) * 140,
+                        radius: 18,
+                        damage: 20,
+                        lifetime: 5
+                    });
+                }
+
+                try { playSfx('fireball'); } catch (e) { }
+                phase++;
+            }, 500);
         }
 
         function gameLoop() {
@@ -3504,9 +3644,6 @@
 
 
             clampCameraToBounds();
-            // Retro alley back layer (slow parallax)
-            drawAlleyBackLayer();
-
             // World transform
             ctx.setTransform(1, 0, 0, 1, canvas.width / 2 - camera.x, canvas.height / 2 - camera.y);
 
@@ -3523,8 +3660,13 @@
             // ctx.fillText(`Tiles: FLOOR=${FLOOR_TILE}  WALL=${WALL_TILE}  ( [ ] ; ' )  R=regen`, 22, 156);
             ctx.restore();
 
-            // Player-follow lighting (screen-space)
-            drawPlayerLighting(dt);
+            // Subtle vignette in screen-space
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            const vg = ctx.createRadialGradient(canvas.width / 2, canvas.height / 2, 50, canvas.width / 2, canvas.height / 2, Math.max(canvas.width, canvas.height) * 0.65);
+            vg.addColorStop(0, 'rgba(0,0,0,0)');
+            vg.addColorStop(1, 'rgba(0,0,0,0.55)');
+            ctx.fillStyle = vg;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // Back to world transform for entities
             ctx.setTransform(1, 0, 0, 1, canvas.width / 2 - camera.x, canvas.height / 2 - camera.y);
@@ -3540,11 +3682,54 @@
                     victory();
                     return;
                 }
+
+                // SPECIAL BOSS EVENT SYSTEM - triggers at specific time marks
+                // Timer counts DOWN from 300 (5:00) to 0
+                // We want events at: 4 min left (240s), 3 min left (180s), 2 min left (120s), 1 min left (60s)
+                const timeRemaining = gameTimer;
+
+                // Track which events have been triggered
+                if (!window.triggeredBossEvents) window.triggeredBossEvents = new Set();
+
+                // Trigger boss events at specific thresholds
+                if (timeRemaining <= 240 && timeRemaining > 235 && !window.triggeredBossEvents.has(4)) {
+                    window.triggeredBossEvents.add(4);
+                    triggerBossEvent(4); // 4 minutes remaining
+                }
+                if (timeRemaining <= 180 && timeRemaining > 175 && !window.triggeredBossEvents.has(3)) {
+                    window.triggeredBossEvents.add(3);
+                    triggerBossEvent(3); // 3 minutes remaining
+                }
+                if (timeRemaining <= 120 && timeRemaining > 115 && !window.triggeredBossEvents.has(2)) {
+                    window.triggeredBossEvents.add(2);
+                    triggerBossEvent(2); // 2 minutes remaining
+                }
+                if (timeRemaining <= 60 && timeRemaining > 55 && !window.triggeredBossEvents.has(1)) {
+                    window.triggeredBossEvents.add(1);
+                    triggerBossEvent(1); // 1 minute remaining - FINAL BOSS EVENT
+                }
             }
 
             // Regeneration
             if (player.upgrades.includes('regen')) {
                 player.health = Math.min(player.maxHealth, player.health + dt);
+            }
+
+
+            // Check ultimate cooldown
+            if (now - player.lastUltimate > 60000 && !player.ultimateReady) {
+                player.ultimateReady = true;
+            }
+
+            // Auto-cast ultimate
+            if (player.ultimateReady && !player.dead) {
+                castUltimate();
+            }
+
+            // Update ultimate indicator
+            const ultIndicator = document.getElementById('ultimateIndicator');
+            if (ultIndicator) {
+                ultIndicator.style.display = player.ultimateReady ? 'block' : 'none';
             }
 
             // Player movement
@@ -3631,15 +3816,49 @@
                 });
             }
 
-            // Spawn enemies - gradually increase spawn rate over time
+            // Spawn enemies - gradually increase spawn rate over time + difficulty scaling
             const minutesSurvived = (300 - gameTimer) / 60;
             // Start at 2.0s, gradually decrease to 0.8s over 5 minutes
-            const spawnRateMultiplier = Math.max(0.4, 1.0 - (minutesSurvived * 0.12));
+            let spawnRateMultiplier = Math.max(0.4, 1.0 - (minutesSurvived * 0.12));
+
+            // Apply difficulty-based spawn rate increase
+            // Higher difficulty = faster spawns (lower multiplier)
+            if (player.difficultyMultiplier > 1.0) {
+                spawnRateMultiplier *= Math.max(0.7, 1.0 / player.difficultyMultiplier);
+            }
+
             const spawnInterval = enemySpawnRate * 1000 * spawnRateMultiplier;
 
             if (now - lastEnemySpawn > spawnInterval) {
                 spawnEnemy();
                 lastEnemySpawn = now;
+            }
+
+            // HORDE WARNING SYSTEM - spawn large hordes periodically (only after 1 minute)
+            const hordeInterval = 45000; // Every 45 seconds
+            if (!window.lastHordeTime) window.lastHordeTime = now;
+
+            // Only trigger hordes after 1 minute of survival
+            const minutesForHorde = (300 - gameTimer) / 60;
+            if (minutesForHorde >= 1.0 && now - window.lastHordeTime >= hordeInterval) {
+                window.lastHordeTime = now;
+
+                // Show warning toast
+                showToastNotification('⚠️ LARGE HORDE INCOMING! ⚠️', '#ff3333');
+                try { playSfx('warn'); } catch (e) { }
+
+                // Spawn horde after 3 seconds
+                setTimeout(() => {
+                    // Horde size scales with level AND difficulty
+                    let hordeSize = 12 + Math.floor(player.level * 1.5);
+                    hordeSize = Math.floor(hordeSize * (player.difficultyMultiplier || 1.0));
+
+                    for (let i = 0; i < hordeSize; i++) {
+                        setTimeout(() => {
+                            spawnEnemy();
+                        }, i * 80); // Stagger spawns slightly
+                    }
+                }, 3000);
             }
 
             // Update and draw enemies
@@ -3671,7 +3890,7 @@
                     continue;
                 }
 
-                // Move towards player
+                // Move towards player with behavior variations
                 const dx = player.x - enemy.x;
                 const dy = player.y - enemy.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
@@ -3682,8 +3901,123 @@
                 }
 
                 if (dist > enemy.radius + player.radius) {
-                    enemy.x += (dx / dist) * enemy.speed * dt;
-                    enemy.y += (dy / dist) * enemy.speed * dt;
+                    // ENHANCED ENEMY BEHAVIORS
+                    let moveX = 0, moveY = 0;
+
+                    switch (enemy.behavior) {
+                        case 'zigzag':
+                            // Zigzag pattern while approaching
+                            enemy.zigzagPhase += dt * 3;
+                            const perpX = -dy / dist;
+                            const perpY = dx / dist;
+                            const zigzagOffset = Math.sin(enemy.zigzagPhase) * 40;
+                            moveX = (dx / dist + perpX * zigzagOffset / 100) * enemy.speed * dt;
+                            moveY = (dy / dist + perpY * zigzagOffset / 100) * enemy.speed * dt;
+                            break;
+
+                        case 'circler':
+                            // Circle around player at medium distance
+                            const preferredDist = 180;
+                            if (dist > preferredDist + 50) {
+                                // Move closer
+                                moveX = (dx / dist) * enemy.speed * dt;
+                                moveY = (dy / dist) * enemy.speed * dt;
+                            } else if (dist < preferredDist - 50) {
+                                // Move away
+                                moveX = -(dx / dist) * enemy.speed * dt;
+                                moveY = -(dy / dist) * enemy.speed * dt;
+                            } else {
+                                // Circle around
+                                enemy.circleAngle += dt * 1.5;
+                                const targetX = player.x + Math.cos(enemy.circleAngle) * preferredDist;
+                                const targetY = player.y + Math.sin(enemy.circleAngle) * preferredDist;
+                                const tdx = targetX - enemy.x;
+                                const tdy = targetY - enemy.y;
+                                const tdist = Math.sqrt(tdx * tdx + tdy * tdy);
+                                if (tdist > 10) {
+                                    moveX = (tdx / tdist) * enemy.speed * dt;
+                                    moveY = (tdy / tdist) * enemy.speed * dt;
+                                }
+                            }
+                            break;
+
+                        case 'rusher':
+                            // Fast straight rush with brief pauses
+                            enemy.behaviorTimer += dt;
+                            if (enemy.behaviorTimer < 1.5) {
+                                // Rush phase - faster movement
+                                moveX = (dx / dist) * enemy.speed * 1.5 * dt;
+                                moveY = (dy / dist) * enemy.speed * 1.5 * dt;
+                            } else if (enemy.behaviorTimer < 2.0) {
+                                // Pause phase
+                                moveX = 0;
+                                moveY = 0;
+                            } else {
+                                enemy.behaviorTimer = 0; // Reset cycle
+                            }
+                            break;
+
+                        case 'retreater':
+                            // Hit and run - approaches then retreats
+                            enemy.behaviorTimer += dt;
+                            if (enemy.behaviorTimer < 2.0) {
+                                // Approach phase
+                                moveX = (dx / dist) * enemy.speed * dt;
+                                moveY = (dy / dist) * enemy.speed * dt;
+                            } else if (enemy.behaviorTimer < 3.5) {
+                                // Retreat phase
+                                moveX = -(dx / dist) * enemy.speed * 0.8 * dt;
+                                moveY = -(dy / dist) * enemy.speed * 0.8 * dt;
+                            } else {
+                                enemy.behaviorTimer = 0; // Reset cycle
+                            }
+                            break;
+
+                        default: // 'chase' - normal behavior
+                            moveX = (dx / dist) * enemy.speed * dt;
+                            moveY = (dy / dist) * enemy.speed * dt;
+                            break;
+                    }
+
+                    enemy.x += moveX;
+                    enemy.y += moveY;
+                }
+
+                // Boss special attacks
+                if (enemy.isBoss && !enemy.dead) {
+                    // Dash attack
+                    if (!enemy.isDashing && now - enemy.lastDash > enemy.dashCooldown) {
+                        enemy.isDashing = true;
+                        enemy.dashTimer = enemy.dashDuration;
+                        enemy.lastDash = now;
+                        const dx = player.x - enemy.x;
+                        const dy = player.y - enemy.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        enemy.dashDirX = dx / dist;
+                        enemy.dashDirY = dy / dist;
+                    }
+
+                    if (enemy.isDashing) {
+                        enemy.x += enemy.dashDirX * enemy.dashSpeed * dt;
+                        enemy.y += enemy.dashDirY * enemy.dashSpeed * dt;
+                        enemy.dashTimer -= dt;
+                        if (enemy.dashTimer <= 0) enemy.isDashing = false;
+                    }
+
+                    // Fireball attack
+                    if (now - enemy.lastFireball > enemy.fireballCooldown) {
+                        enemy.lastFireball = now;
+                        const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                        bossFireballs.push({
+                            x: enemy.x,
+                            y: enemy.y,
+                            vx: Math.cos(angle) * 200,
+                            vy: Math.sin(angle) * 200,
+                            radius: 15,
+                            damage: 20,
+                            lifetime: 5
+                        });
+                    }
                 }
 
                 // Collision with player
@@ -3781,7 +4115,7 @@
 
             }
 
-            // Update and draw projectiles            // Update and draw projectiles
+            // Update and draw projectiles
             for (let i = projectiles.length - 1; i >= 0; i--) {
                 const proj = projectiles[i];
 
@@ -3914,6 +4248,131 @@
                     ctx.strokeStyle = '#fff';
                     ctx.lineWidth = 1;
                     ctx.stroke();
+                }
+            }
+
+            // Update boss fireballs (moved outside projectile loop to fix scoping)
+            for (let i = bossFireballs.length - 1; i >= 0; i--) {
+                const fb = bossFireballs[i];
+                fb.x += fb.vx * dt;
+                fb.y += fb.vy * dt;
+                fb.lifetime -= dt;
+
+                if (fb.lifetime <= 0) {
+                    bossFireballs.splice(i, 1);
+                    continue;
+                }
+
+                const dx = player.x - fb.x;
+                const dy = player.y - fb.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < player.radius + fb.radius) {
+                    let dmg = fb.damage;
+                    if (player.armor) dmg *= (1 - player.armor);
+                    player.health -= dmg;
+
+                    explosionEffects.push({
+                        x: fb.x,
+                        y: fb.y,
+                        radius: 0,
+                        maxRadius: 50,
+                        lifetime: 0.3,
+                        age: 0
+                    });
+
+                    bossFireballs.splice(i, 1);
+
+                    // Check if player died from fireball
+                    if (player.health <= 0 && !player.dead) {
+                        player.animState = 'dead';
+                        player.dead = true;
+                        try { playSfx('death'); } catch (e) { }
+                        setTimeout(() => {
+                            gameOver();
+                        }, 1000); // Wait for death animation
+                        return;
+                    }
+
+                    continue;
+                }
+
+                // Draw fireball
+                ctx.save();
+                ctx.translate(fb.x, fb.y);
+                const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, fb.radius);
+                gradient.addColorStop(0, '#ffff00');
+                gradient.addColorStop(0.5, '#ff6600');
+                gradient.addColorStop(1, '#ff0000');
+                ctx.fillStyle = gradient;
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = '#ff6600';
+                ctx.beginPath();
+                ctx.arc(0, 0, fb.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // Update ultimate effects
+            for (let i = ultimateEffects.length - 1; i >= 0; i--) {
+                const ult = ultimateEffects[i];
+                ult.age += dt;
+
+                if (ult.age >= ult.lifetime) {
+                    ultimateEffects.splice(i, 1);
+                    continue;
+                }
+
+                if (ult.type === 'shockwave') {
+                    ult.radius = (ult.age / ult.lifetime) * ult.maxRadius;
+                    ctx.save();
+                    ctx.translate(ult.x, ult.y);
+                    const alpha = 1 - (ult.age / ult.lifetime);
+                    ctx.strokeStyle = `rgba(212, 175, 55, ${alpha})`;
+                    ctx.lineWidth = 15;
+                    ctx.shadowBlur = 30;
+                    ctx.shadowColor = 'rgba(212, 175, 55, 0.8)';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, ult.radius, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                if (ult.type === 'tornado') {
+                    ult.rotation += 10 * dt;
+
+                    enemies.forEach(enemy => {
+                        const dx = enemy.x - player.x;
+                        const dy = enemy.y - player.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < ult.radius) {
+                            enemy.health -= 15 * dt;
+                            enemy.hurtTimer = 0.1;
+                            if (enemy.health <= 0) markEnemyDead(enemy);
+                        }
+                    });
+
+                    ctx.save();
+                    ctx.translate(player.x, player.y);
+                    for (let b = 0; b < 8; b++) {
+                        const angle = ult.rotation + (Math.PI * 2 * b) / 8;
+                        const dist = ult.radius * 0.7;
+                        const x = Math.cos(angle) * dist;
+                        const y = Math.sin(angle) * dist;
+                        ctx.save();
+                        ctx.translate(x, y);
+                        ctx.rotate(angle);
+                        ctx.strokeStyle = 'rgba(100, 150, 255, 0.8)';
+                        ctx.lineWidth = 6;
+                        ctx.shadowBlur = 15;
+                        ctx.shadowColor = 'rgba(100, 150, 255, 0.8)';
+                        ctx.beginPath();
+                        ctx.moveTo(-20, 0);
+                        ctx.lineTo(20, 0);
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+                    ctx.restore();
                 }
             }
 
@@ -4078,11 +4537,37 @@
                 if (dist < player.radius + orb.radius + 5) {
                     const xpMultiplier = 1 + (gameState.permanentUpgrades.xp * 0.1);
                     player.xp += orb.value * xpMultiplier;
+                    sounds.playOrbPickup();
 
                     if (player.xp >= player.xpToNext) {
                         player.xp -= player.xpToNext;
                         player.level++;
-                        player.xpToNext = Math.floor(player.xpToNext * 1.25 + 10);
+
+                        // FIXED XP PROGRESSION - Easy early, progressively harder
+                        // Each enemy gives 10 XP, so divide by 10 to get kill count
+                        // Level 1->2: 30 XP (3 kills) - Very easy start!
+                        // Level 2->3: 40 XP (4 kills)
+                        // Level 3->4: 50 XP (5 kills)
+                        // Level 4->5: 60 XP (6 kills)
+                        // Level 5->6: 70 XP (7 kills)
+                        // Level 6->10: 80-120 XP (8-12 kills)
+                        // Level 10+: Exponential growth
+
+                        if (player.level <= 5) {
+                            // Levels 1-5: Very easy, linear growth
+                            player.xpToNext = 20 + (player.level * 10);
+                        } else if (player.level <= 10) {
+                            // Levels 6-10: Moderate growth
+                            player.xpToNext = 70 + ((player.level - 5) * 10);
+                        } else if (player.level <= 15) {
+                            // Levels 11-15: Quadratic growth
+                            const levelAbove10 = player.level - 10;
+                            player.xpToNext = 120 + (levelAbove10 * levelAbove10 * 15);
+                        } else {
+                            // Levels 16+: Exponential for late game challenge
+                            player.xpToNext = Math.floor(player.xpToNext * 1.4 + 60);
+                        }
+
                         levelUp();
                     }
 
@@ -4313,9 +4798,6 @@
 
             // Continue loop
             ctx.setTransform(1, 0, 0, 1, 0, 0);
-            // Foreground grime/scanlines (screen-space)
-            drawAlleyForeLayer();
-
             requestAnimationFrame(gameLoop);
         }
 
@@ -4603,9 +5085,27 @@
                     case 'explosion': beep({ freq: 120, dur: 0.12, type: 'sawtooth', gain: 0.18, slideTo: 60 }); break;
                     case 'vampire': beep({ freq: 420, dur: 0.06, type: 'triangle', gain: 0.08, slideTo: 520 }); break;
                     case 'boomerang': beep({ freq: 520, dur: 0.05, type: 'triangle', gain: 0.05, slideTo: 420 }); break;
-                    case 'arrow': beep({ freq: 900, dur: 0.04, type: 'square', gain: 0.10, slideTo: 1200 }); break;
-                    case 'punch': beep({ freq: 180, dur: 0.05, type: 'square', gain: 0.12, slideTo: 140 }); break;
-                    case 'sword': beep({ freq: 480, dur: 0.06, type: 'triangle', gain: 0.14, slideTo: 760 }); break;
+
+                    // CHARACTER-SPECIFIC ATTACK SOUNDS (POLISHED)
+                    case 'arrow':
+                        // Luna - crisp arrow shooting sound with whoosh
+                        beep({ freq: 1100, dur: 0.05, type: 'sine', gain: 0.14, slideTo: 1500 });
+                        setTimeout(() => beep({ freq: 1500, dur: 0.03, type: 'sine', gain: 0.08, slideTo: 1200 }), 30);
+                        break;
+                    case 'punch':
+                        // Rex - deep punching impact sound
+                        beep({ freq: 150, dur: 0.08, type: 'square', gain: 0.20, slideTo: 90 });
+                        setTimeout(() => beep({ freq: 80, dur: 0.06, type: 'sawtooth', gain: 0.16, slideTo: 60 }), 45);
+                        break;
+                    case 'sword':
+                        // Blade - sharp sword slash with metallic ring
+                        beep({ freq: 550, dur: 0.08, type: 'triangle', gain: 0.16, slideTo: 920 });
+                        setTimeout(() => beep({ freq: 420, dur: 0.06, type: 'sawtooth', gain: 0.12, slideTo: 320 }), 50);
+                        break;
+
+                    case 'slash': beep({ freq: 380, dur: 0.06, type: 'triangle', gain: 0.12, slideTo: 520 }); break;
+                    case 'shoot': beep({ freq: 520, dur: 0.04, type: 'square', gain: 0.08, slideTo: 420 }); break;
+
                     case 'crit':
                         // bright, short "ping" layered
                         beep({ freq: 1200, dur: 0.04, type: 'triangle', gain: 0.14, slideTo: 1600 });
@@ -4614,7 +5114,11 @@
 
                     case 'dash': beep({ freq: 220, dur: 0.09, type: 'square', gain: 0.12, slideTo: 660 }); break;
                     case 'fireball': beep({ freq: 300, dur: 0.10, type: 'sawtooth', gain: 0.12, slideTo: 180 }); break;
-                    case 'warn': beep({ freq: 900, dur: 0.06, type: 'square', gain: 0.08, slideTo: 750 }); break;
+                    case 'warn':
+                        // Warning sound for horde
+                        beep({ freq: 900, dur: 0.10, type: 'square', gain: 0.14, slideTo: 750 });
+                        setTimeout(() => beep({ freq: 900, dur: 0.10, type: 'square', gain: 0.14, slideTo: 750 }), 200);
+                        break;
                     default: beep({ freq: 440, dur: 0.06, type: 'square', gain: 0.10 }); break;
                 }
             };
@@ -4727,6 +5231,41 @@
             });
         })();
     </script>
+
+
+    <!-- Active Upgrades Indicator -->
+    <div id="activeUpgrades" style="position: fixed; bottom: 20px; right: 20px; 
+         background: rgba(0,0,0,0.9); border: 2px solid var(--gold); 
+         padding: 0.5rem; max-width: 200px; display: none; z-index: 100;
+         font-family: 'Rajdhani', sans-serif; box-sizing: border-box;">
+        <div style="font-family: 'Bebas Neue'; color: var(--gold); font-size: 0.9rem; margin-bottom: 0.3rem;">ACTIVE
+        </div>
+        <div id="upgradeList" style="font-size: 0.7rem; color: #aaa; line-height: 1.4;"></div>
+    </div>
+
+    <!-- Ultimate Ready Indicator -->
+    <div id="ultimateIndicator" style="position: fixed; bottom: 120px; left: 50%; 
+         transform: translateX(-50%); display: none; z-index: 150;
+         font-family: 'Bebas Neue'; font-size: 2rem; color: #ffaa00; 
+         text-shadow: 0 0 20px #ffaa00; animation: ultPulse 1s infinite;">
+        ⚡ ULTIMATE READY ⚡
+    </div>
+
+    <style>
+        @keyframes ultPulse {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: translateX(-50%) scale(1);
+            }
+
+            50% {
+                opacity: 0.6;
+                transform: translateX(-50%) scale(1.1);
+            }
+        }
+    </style>
 
 </body>
 
