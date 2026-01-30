@@ -1507,6 +1507,19 @@
 
         <div style="max-width: 800px; margin: 2rem auto; display: flex; flex-direction: column; gap: 2rem;">
 
+
+            <!-- Audio -->
+            <div class="character-card" style="background: linear-gradient(135deg, #1a2a2a 0%, #0e1414 100%);">
+                <h3 class="char-name">Audio</h3>
+                <p class="char-description">Toggle background music and sound effects.</p>
+                <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:12px;">
+                    <button id="musicToggleBtn" class="menu-btn" style="min-width:160px;" onclick="toggleMusic()">Music:
+                        ON</button>
+                    <button id="sfxToggleBtn" class="menu-btn" style="min-width:160px;" onclick="toggleSfx()">SFX:
+                        ON</button>
+                </div>
+            </div>
+
             <!-- Game Info -->
             <div class="character-card" style="background: linear-gradient(135deg, #2c2c2c 0%, #1a1a1a 100%);">
                 <h3 class="char-name">Game Information</h3>
@@ -1819,6 +1832,341 @@
         }
 
         // Draw visible world tiles (called every frame)
+
+        // --- Retro Alley procedural tiles (no external assets) ---
+        // Set to true to use the procedural alley look instead of the image tileset.
+        const RETRO_ALLEY_MODE = true;
+
+        const ALLEY_STYLE = {
+            // widths are in tiles
+            roadHalfWidth: 10,        // center road half-width (total road width = roadHalfWidth*2)
+            sidewalkWidth: 6,         // sidewalk per side, adjacent to road
+            wallWidth: 3              // outer "building edge" band
+        };
+
+        function hash2i(x, y) {
+            // deterministic pseudo-random in [0,1)
+            let n = (x * 374761393) ^ (y * 668265263);
+            n = (n ^ (n >>> 13)) * 1274126177;
+            n = (n ^ (n >>> 16)) >>> 0;
+            return (n & 0xffffffff) / 4294967296;
+        }
+
+        function drawRetroTile(tx, ty, wx, wy) {
+            const centerX = Math.floor(MAP_W / 2);
+            const dx = tx - centerX;
+
+            const r = hash2i(tx, ty);
+            const r2 = hash2i(tx + 91, ty - 37);
+
+            // bands: wall | sidewalk | road | sidewalk | wall
+            const absDx = Math.abs(dx);
+            const road = absDx <= ALLEY_STYLE.roadHalfWidth;
+            const sidewalk = (!road) && (absDx <= (ALLEY_STYLE.roadHalfWidth + ALLEY_STYLE.sidewalkWidth));
+            const wall = (!road && !sidewalk) && (absDx <= (ALLEY_STYLE.roadHalfWidth + ALLEY_STYLE.sidewalkWidth + ALLEY_STYLE.wallWidth));
+
+            // base colors (kept dark so your gold HUD stays readable)
+            let base = '#0b0f14';       // deep asphalt
+            let accent = '#101821';
+            if (road) { base = (r < 0.18) ? '#0a0d12' : '#0b1017'; accent = '#0f1822'; }
+            else if (sidewalk) { base = (r < 0.20) ? '#101418' : '#0f1317'; accent = '#141a21'; }
+            else if (wall) { base = (r < 0.25) ? '#141216' : '#121015'; accent = '#1a151c'; }
+            else { base = (r < 0.25) ? '#0a0a0a' : '#0b0b0b'; accent = '#111'; }
+
+            // Fill base
+            ctx.fillStyle = base;
+            ctx.fillRect(wx, wy, TILE_PX, TILE_PX);
+
+            // gritty noise specks (cheap pixel texture)
+            const specks = 5 + Math.floor(r2 * 6);
+            for (let i = 0; i < specks; i++) {
+                const sx = wx + Math.floor(hash2i(tx + i * 7, ty + 11) * TILE_PX);
+                const sy = wy + Math.floor(hash2i(tx + 19, ty + i * 5) * TILE_PX);
+                const a = 0.12 + hash2i(tx + i * 3, ty + i * 9) * 0.18;
+                ctx.fillStyle = `rgba(255,255,255,${a})`;
+                ctx.fillRect(sx, sy, 1, 1);
+            }
+
+            // Road lane line (subtle dashed)
+            if (road) {
+                const lane = (dx === 0) || (dx === -1);
+                if (lane && (ty % 4 !== 0)) {
+                    ctx.fillStyle = 'rgba(212,175,55,0.08)';
+                    ctx.fillRect(wx + Math.floor(TILE_PX * 0.48), wy + 4, 2, TILE_PX - 8);
+                }
+                // occasional manhole / drain
+                if (r < 0.035) {
+                    ctx.strokeStyle = 'rgba(200,200,200,0.18)';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(wx + TILE_PX * 0.5, wy + TILE_PX * 0.55, TILE_PX * 0.18, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+                    ctx.beginPath();
+                    ctx.arc(wx + TILE_PX * 0.5, wy + TILE_PX * 0.55, TILE_PX * 0.14, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                // rare puddle (neon-ish)
+                if (r > 0.965) {
+                    ctx.fillStyle = 'rgba(80,200,255,0.10)';
+                    ctx.beginPath();
+                    ctx.ellipse(wx + TILE_PX * 0.55, wy + TILE_PX * 0.62, TILE_PX * 0.28, TILE_PX * 0.16, 0.2, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = 'rgba(180,210,255,0.18)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+            }
+
+            // Sidewalk seams (grid)
+            if (sidewalk) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+                ctx.lineWidth = 1;
+                // vertical seam
+                if ((tx + ty) % 2 === 0) {
+                    ctx.beginPath();
+                    ctx.moveTo(wx + TILE_PX * 0.5, wy + 2);
+                    ctx.lineTo(wx + TILE_PX * 0.5, wy + TILE_PX - 2);
+                    ctx.stroke();
+                }
+                // horizontal seam
+                if (ty % 2 === 0) {
+                    ctx.beginPath();
+                    ctx.moveTo(wx + 2, wy + TILE_PX * 0.5);
+                    ctx.lineTo(wx + TILE_PX - 2, wy + TILE_PX * 0.5);
+                    ctx.stroke();
+                }
+
+                // curb edge next to road
+                const curbEdge = (absDx === (ALLEY_STYLE.roadHalfWidth + 1));
+                if (curbEdge) {
+                    ctx.strokeStyle = 'rgba(212,175,55,0.14)';
+                    ctx.lineWidth = 2;
+                    const x = dx > 0 ? wx : (wx + TILE_PX);
+                    ctx.beginPath();
+                    ctx.moveTo(x, wy);
+                    ctx.lineTo(x, wy + TILE_PX);
+                    ctx.stroke();
+                }
+            }
+
+            // Wall band: brick-ish pattern + occasional neon sign strip
+            if (wall) {
+                // brick lines
+                ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+                ctx.lineWidth = 1;
+                const row = ty % 3;
+                const offset = (row === 1) ? TILE_PX * 0.25 : 0;
+                for (let i = 0; i < 3; i++) {
+                    const y = wy + (i + 1) * (TILE_PX / 4);
+                    ctx.beginPath();
+                    ctx.moveTo(wx + 2, y);
+                    ctx.lineTo(wx + TILE_PX - 2, y);
+                    ctx.stroke();
+                }
+                for (let i = 0; i < 2; i++) {
+                    const x = wx + offset + (i + 1) * (TILE_PX / 3);
+                    ctx.beginPath();
+                    ctx.moveTo(x, wy + 2);
+                    ctx.lineTo(x, wy + TILE_PX - 2);
+                    ctx.stroke();
+                }
+
+                // neon strip very rarely
+                if (r < 0.02) {
+                    ctx.fillStyle = 'rgba(255,80,200,0.10)';
+                    ctx.fillRect(wx + 4, wy + 6, TILE_PX - 8, 4);
+                    ctx.fillStyle = 'rgba(80,200,255,0.08)';
+                    ctx.fillRect(wx + 6, wy + 14, TILE_PX - 12, 3);
+                }
+            }
+
+            // outer area: darker fade
+            if (!road && !sidewalk && !wall) {
+                ctx.fillStyle = 'rgba(0,0,0,0.25)';
+                ctx.fillRect(wx, wy, TILE_PX, TILE_PX);
+            }
+
+            // micro shadow at tile bottom (gives depth)
+            ctx.fillStyle = 'rgba(0,0,0,0.10)';
+            ctx.fillRect(wx, wy + TILE_PX - 3, TILE_PX, 3);
+        }
+
+
+        // --- Retro Alley extras: variation decals, parallax layers, and faux platforms ---
+        // Tile-level decals & platform accents (visual only)
+        function drawAlleyTileDecals(tx, ty, wx, wy) {
+            // deterministic rarity per-tile
+            const r = hash2i(tx, ty);
+            // curb highlight where sidewalk meets road
+            const centerX = Math.floor(MAP_W / 2);
+            const dx = Math.abs(tx - centerX);
+            const roadEdge = ALLEY_STYLE.roadHalfWidth;
+            const onCurb = (dx === roadEdge);
+            if (onCurb) {
+                ctx.strokeStyle = 'rgba(240, 210, 80, 0.10)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(wx + 1, wy + 1);
+                ctx.lineTo(wx + 1, wy + TILE_PX - 1);
+                ctx.stroke();
+            }
+
+            // rare crate/platform marking (visual only)
+            if (r < 0.012) {
+                const inset = 10;
+                ctx.save();
+                ctx.translate(wx + TILE_PX / 2, wy + TILE_PX / 2);
+                const rot = (hash2i(tx + 99, ty - 77) - 0.5) * 0.35;
+                ctx.rotate(rot);
+                ctx.translate(-TILE_PX / 2, -TILE_PX / 2);
+
+                ctx.fillStyle = 'rgba(0,0,0,0.18)';
+                ctx.fillRect(inset + 4, inset + 10, TILE_PX - inset * 2, TILE_PX - inset * 2);
+
+                ctx.strokeStyle = 'rgba(220, 200, 120, 0.22)';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(inset, inset, TILE_PX - inset * 2, TILE_PX - inset * 2);
+
+                // diagonal plank lines
+                ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(inset + 6, inset + 6);
+                ctx.lineTo(TILE_PX - inset - 6, TILE_PX - inset - 6);
+                ctx.moveTo(inset + 6, TILE_PX - inset - 6);
+                ctx.lineTo(TILE_PX - inset - 6, inset + 6);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // puddle glint (adds depth, breaks repetition)
+            if (r >= 0.012 && r < 0.05) {
+                ctx.save();
+                ctx.globalAlpha = 0.55;
+                const px = wx + 10 + hash2i(tx + 7, ty + 3) * (TILE_PX - 20);
+                const py = wy + 10 + hash2i(tx - 5, ty + 11) * (TILE_PX - 20);
+                const pr = 10 + hash2i(tx + 31, ty - 17) * 16;
+                const g = ctx.createRadialGradient(px, py, 2, px, py, pr);
+                g.addColorStop(0, 'rgba(120,190,255,0.22)');
+                g.addColorStop(1, 'rgba(120,190,255,0.00)');
+                ctx.fillStyle = g;
+                ctx.beginPath();
+                ctx.ellipse(px, py, pr * 1.25, pr * 0.75, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // Back layer: wall/building hints (slow parallax)
+        function drawAlleyBackLayer() {
+            if (!RETRO_ALLEY_MODE) return;
+            const par = 0.22;
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, canvas.width / 2 - camera.x * par, canvas.height / 2 - camera.y * par);
+
+            // draw subtle vertical wall columns in view bounds
+            const viewW = canvas.width / par + 400;
+            const viewH = canvas.height / par + 400;
+            const left = camera.x * par - (canvas.width / 2) + -200;
+            const top = camera.y * par - (canvas.height / 2) + -200;
+
+            ctx.globalAlpha = 0.35;
+            for (let i = 0; i < 26; i++) {
+                const x = (Math.floor((left + i * 180) / 180) * 180);
+                const w = 60 + (hash2i(i, 9) * 30);
+                const grad = ctx.createLinearGradient(x, top, x + w, top);
+                grad.addColorStop(0, 'rgba(70,80,110,0.10)');
+                grad.addColorStop(1, 'rgba(10,10,20,0.00)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(x, top, w, viewH);
+            }
+
+            // occasional neon strip
+            ctx.globalAlpha = 0.25;
+            for (let k = 0; k < 10; k++) {
+                const nx = Math.floor((left + k * 420) / 420) * 420 + 120;
+                const ny = Math.floor((top + k * 260) / 260) * 260 + 80;
+                ctx.fillStyle = 'rgba(255, 80, 200, 0.14)';
+                ctx.fillRect(nx, ny, 140, 2);
+                ctx.fillStyle = 'rgba(80, 220, 255, 0.10)';
+                ctx.fillRect(nx + 18, ny + 8, 110, 2);
+            }
+
+            ctx.restore();
+        }
+
+        // Fore layer: grime / scanlines (slightly faster than floor)
+        function drawAlleyForeLayer() {
+            if (!RETRO_ALLEY_MODE) return;
+            // screen-space overlay (very subtle)
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+            // soft grime vignettes
+            ctx.globalAlpha = 0.18;
+            for (let i = 0; i < 6; i++) {
+                const rx = (i * 173 + (performance.now() * 0.02)) % (canvas.width + 200) - 100;
+                const ry = (i * 211 + (performance.now() * 0.017)) % (canvas.height + 200) - 100;
+                const r = 220 + (i * 40);
+                const g = ctx.createRadialGradient(rx, ry, 10, rx, ry, r);
+                g.addColorStop(0, 'rgba(0,0,0,0.10)');
+                g.addColorStop(1, 'rgba(0,0,0,0.00)');
+                ctx.fillStyle = g;
+                ctx.beginPath();
+                ctx.arc(rx, ry, r, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // faint scanlines
+            ctx.globalAlpha = 0.07;
+            ctx.fillStyle = 'rgba(0,0,0,1)';
+            for (let y = 0; y < canvas.height; y += 4) {
+                ctx.fillRect(0, y, canvas.width, 1);
+            }
+
+            ctx.restore();
+        }
+
+        // Player-follow light (replaces static center vignette)
+        function drawPlayerLighting(dt) {
+            // pulse decays over time
+            if (!gameState.lightPulse) gameState.lightPulse = 0;
+            gameState.lightPulse = Math.max(0, gameState.lightPulse - dt * 1.6);
+
+            const px = canvas.width / 2 + (player.x - camera.x);
+            const py = canvas.height / 2 + (player.y - camera.y);
+
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+            // Darkness layer
+            ctx.fillStyle = 'rgba(0,0,0,0.28)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Light hole
+            const pulse = gameState.lightPulse;
+            const inner = 70 + pulse * 50;
+            const outer = Math.max(canvas.width, canvas.height) * (0.62 + pulse * 0.08);
+            const g = ctx.createRadialGradient(px, py, inner, px, py, outer);
+            g.addColorStop(0, 'rgba(0,0,0,0.0)');
+            g.addColorStop(0.55, 'rgba(0,0,0,0.18)');
+            g.addColorStop(1, 'rgba(0,0,0,0.62)');
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // subtle player glow
+            ctx.globalAlpha = 0.22;
+            const g2 = ctx.createRadialGradient(px, py, 10, px, py, 120 + pulse * 40);
+            g2.addColorStop(0, 'rgba(180,220,255,0.22)');
+            g2.addColorStop(1, 'rgba(180,220,255,0)');
+            ctx.fillStyle = g2;
+            ctx.beginPath();
+            ctx.arc(px, py, 140, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
         function drawTiles() {
             // View bounds in world coords
             const left = camera.x - canvas.width / 2;
@@ -1835,7 +2183,10 @@
                     const wx = tx * TILE_PX;
                     const wy = ty * TILE_PX;
 
-                    if (tilesetReady) {
+                    if (RETRO_ALLEY_MODE) {
+                        drawRetroTile(tx, ty, wx, wy);
+                        drawAlleyTileDecals(tx, ty, wx, wy);
+                    } else if (tilesetReady) {
                         const { sx, sy } = tileToSrc(tileIndex);
                         ctx.drawImage(
                             tileset,
@@ -1918,6 +2269,14 @@
             img.style.width = '0px';
             img.style.height = '0px';
             img.style.transform = 'translate(-50%, -50%)';
+
+            img.style.objectFit = 'contain';
+            // fallback backdrop/outline improves readability even if GIF fails to load
+            img.style.background = 'radial-gradient(circle at 40% 35%, rgba(200,230,255,0.18), rgba(0,0,0,0.35) 60%, rgba(0,0,0,0.0) 72%)';
+            img.style.borderRadius = '50%';
+            img.style.outline = '2px solid rgba(180,210,255,0.18)';
+            img.style.boxShadow = '0 0 0 6px rgba(0,0,0,0.25)';
+
             spriteOverlay.appendChild(img);
             enemyDomImgs.set(enemy.id, img);
             return img;
@@ -2129,6 +2488,176 @@
             dead: false
         };
 
+        // Advanced Sound System with Improved SFX
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+
+        const sounds = {
+            playPunch: () => {
+                const osc = audioCtx.createOscillator();
+                const osc2 = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                const filter = audioCtx.createBiquadFilter();
+
+                osc.connect(filter);
+                osc2.connect(filter);
+                filter.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                // Deep bass punch with impact
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.1);
+
+                // Add sub-bass for more impact
+                osc2.type = 'sine';
+                osc2.frequency.setValueAtTime(60, audioCtx.currentTime);
+                osc2.frequency.exponentialRampToValueAtTime(20, audioCtx.currentTime + 0.08);
+
+                filter.type = 'lowpass';
+                filter.frequency.value = 500;
+
+                gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+
+                osc.start();
+                osc2.start();
+                osc.stop(audioCtx.currentTime + 0.12);
+                osc2.stop(audioCtx.currentTime + 0.12);
+            },
+
+            playArrow: () => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                const filter = audioCtx.createBiquadFilter();
+
+                osc.connect(filter);
+                filter.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                // Whoosh sound with air release
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.2);
+
+                filter.type = 'bandpass';
+                filter.frequency.setValueAtTime(2000, audioCtx.currentTime);
+                filter.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.2);
+                filter.Q.value = 3;
+
+                gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.2);
+            },
+
+            playSwordSlash: () => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                const filter = audioCtx.createBiquadFilter();
+
+                osc.connect(filter);
+                filter.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                // Sharp metallic slash
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.1);
+
+                filter.type = 'highpass';
+                filter.frequency.setValueAtTime(800, audioCtx.currentTime);
+                filter.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.1);
+                filter.Q.value = 5;
+
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.1);
+            },
+
+            playOrbPickup: () => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                // Pleasant chime
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1320, audioCtx.currentTime + 0.15);
+
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.15);
+            },
+
+            playUltimate: () => {
+                const osc = audioCtx.createOscillator();
+                const osc2 = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.connect(gain);
+                osc2.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                // Power-up sound
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.4);
+
+                osc2.type = 'sine';
+                osc2.frequency.setValueAtTime(300, audioCtx.currentTime);
+                osc2.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.4);
+
+                gain.gain.setValueAtTime(0.35, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+
+                osc.start();
+                osc2.start();
+                osc.stop(audioCtx.currentTime + 0.4);
+                osc2.stop(audioCtx.currentTime + 0.4);
+            },
+
+            playExplosion: () => {
+                const noise = audioCtx.createBufferSource();
+                const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.3, audioCtx.sampleRate);
+                const output = noiseBuffer.getChannelData(0);
+                for (let i = 0; i < noiseBuffer.length; i++) {
+                    output[i] = Math.random() * 2 - 1;
+                }
+                noise.buffer = noiseBuffer;
+
+                const filter = audioCtx.createBiquadFilter();
+                const gain = audioCtx.createGain();
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(1000, audioCtx.currentTime);
+                filter.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.3);
+
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+
+                noise.start();
+                noise.stop(audioCtx.currentTime + 0.3);
+            }
+        };
+
+        // Boss Fireballs Array
+        const bossFireballs = [];
+
+        // Ultimate Effects Array
+        const ultimateEffects = [];
+
         // Input handling
         const keys = {};
         window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
@@ -2293,6 +2822,8 @@
         const slashEffects = [];
 
         // Explosion effects for explosive strikes
+        // SFX on explosion spawn
+
         const explosionEffects = [];
 
         // XP Orbs
@@ -2301,6 +2832,8 @@
         // Game timer
         let gameTimer = 300; // 5 minutes in seconds
         let lastTimerUpdate = 0;
+        let _lastHitSfx = 0; // throttle hit sfx
+        let _lastDeathSfx = 0;
 
         // Upgrade system
         const upgradePool = [
@@ -2333,8 +2866,15 @@
             { name: 'Ghost Shield', description: 'Absorb next 20 damage', apply: (p) => { p.shield = (p.shield || 0) + 20; } },
             { name: 'Rapid Fire', description: '+30% Attack Speed', apply: (p) => { p.attackSpeed *= 0.7; } },
             { name: 'Berserker', description: '+10 Damage, -10 Max HP', apply: (p) => { p.damage += 10; p.maxHealth -= 10; p.health = Math.min(p.health, p.maxHealth); } },
-            { name: 'Multi-Strike', description: 'Fire 3 projectiles', apply: (p) => { p.upgrades.push('tripleshot'); } },
-            { name: 'Bloodlust', description: '+2% damage per kill', apply: (p) => { p.upgrades.push('bloodlust'); } }
+            { name: 'Multi-Strike', description: 'Fire 5 projectiles in spread', apply: (p) => { p.upgrades.push('multishot'); } },
+            { name: 'Bloodlust', description: '+2% damage per kill', apply: (p) => { p.upgrades.push('bloodlust'); } },
+            { name: 'Haste', description: '+25% Movement Speed', apply: (p) => { p.moveSpeed *= 1.25; } },
+            { name: 'Armor', description: 'Reduce damage by 10%', apply: (p) => { p.armor = (p.armor || 0) + 0.1; } },
+            { name: 'XP Magnet', description: 'Attract XP from farther', apply: (p) => { p.upgrades.push('magnet'); } },
+            { name: 'Thorns', description: 'Reflect 20% damage', apply: (p) => { p.thorns = (p.thorns || 0) + 0.2; } },
+            { name: 'Lucky', description: 'Better upgrade choices', apply: (p) => { p.upgrades.push('lucky'); } },
+            { name: 'Knockback', description: 'Push enemies back', apply: (p) => { p.upgrades.push('knockback'); } },
+            { name: 'Frenzy', description: '+5% attack speed per kill', apply: (p) => { p.upgrades.push('frenzy'); } }
         ];
 
         // Menu functions
@@ -2676,6 +3216,7 @@
         }
 
         function levelUp() {
+            gameState.lightPulse = 1;
             gameState.screen = 'levelup';
             document.getElementById('levelUpScreen').style.display = 'flex';
 
@@ -2698,6 +3239,8 @@
             });
         }
 
+
+
         function selectUpgrade(upgrade) {
             upgrade.apply(player);
             document.getElementById('levelUpScreen').style.display = 'none';
@@ -2706,6 +3249,9 @@
 
             // Resume game loop immediately
             ctx.setTransform(1, 0, 0, 1, 0, 0);
+            // Foreground grime/scanlines (screen-space)
+            drawAlleyForeLayer();
+
             requestAnimationFrame(gameLoop);
         }
 
@@ -2745,6 +3291,7 @@
                 const baseAngle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
 
                 const shootProjectile = (angleOffset = 0) => {
+                    try { if (player.weapon === 'bone_boomerang') playSfx('boomerang'); } catch (e) { }
                     projectiles.push({
                         x: player.x,
                         y: player.y,
@@ -2759,6 +3306,10 @@
                 };
 
                 shootProjectile();
+                try {
+                    if (player.name === 'Luna') playSfx('arrow');
+                    else playSfx('shoot');
+                } catch (e) { }
 
                 // Double Shot + Multi-Strike stacking (works for ALL ranged characters)
                 const dsLevel = player.upgrades.filter(u => u === 'doubleshot').length;
@@ -2841,7 +3392,7 @@
                     if (!t) continue;
 
                     let damage = player.damage;
-                    if (player.upgrades.includes('crit') && Math.random() < 0.2) damage *= 2;
+                    if (player.upgrades.includes('crit') && Math.random() < 0.2) { damage *= 2; try { playSfx('crit'); } catch (e) { } }
 
                     t.health -= damage;
                     if (t.health <= 0) {
@@ -2851,6 +3402,7 @@
 
                 // Explosive strikes for melee
                 if (player.upgrades.includes('explosion') && Math.random() < 0.15) {
+                    try { playSfx('explosion'); } catch (e) { }
                     explosionEffects.push({
                         x: nearest.x,
                         y: nearest.y,
@@ -2879,6 +3431,11 @@
 
                 // Create slash effect for melee
                 const angle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
+                try {
+                    if (player.name === 'Blade') playSfx('sword');
+                    else if (player.name === 'Rex') playSfx('punch');
+                    else playSfx('slash');
+                } catch (e) { }
                 slashEffects.push({
                     x: player.x,
                     y: player.y,
@@ -2910,7 +3467,9 @@
 
             // Vampiric Aura
             if (player.upgrades.includes('vampire')) {
-                player.health = Math.min(player.maxHealth, player.health + player.maxHealth * 0.05);
+                // Heal a small % of max HP per kill (subtle sustain)
+                player.health = Math.min(player.maxHealth, player.health + player.maxHealth * 0.02);
+                try { playSfx('vampire'); } catch (e) { }
             }
 
             // Bloodlust - increase damage per kill
@@ -2945,6 +3504,9 @@
 
 
             clampCameraToBounds();
+            // Retro alley back layer (slow parallax)
+            drawAlleyBackLayer();
+
             // World transform
             ctx.setTransform(1, 0, 0, 1, canvas.width / 2 - camera.x, canvas.height / 2 - camera.y);
 
@@ -2961,13 +3523,8 @@
             // ctx.fillText(`Tiles: FLOOR=${FLOOR_TILE}  WALL=${WALL_TILE}  ( [ ] ; ' )  R=regen`, 22, 156);
             ctx.restore();
 
-            // Subtle vignette in screen-space
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-            const vg = ctx.createRadialGradient(canvas.width / 2, canvas.height / 2, 50, canvas.width / 2, canvas.height / 2, Math.max(canvas.width, canvas.height) * 0.65);
-            vg.addColorStop(0, 'rgba(0,0,0,0)');
-            vg.addColorStop(1, 'rgba(0,0,0,0.55)');
-            ctx.fillStyle = vg;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // Player-follow lighting (screen-space)
+            drawPlayerLighting(dt);
 
             // Back to world transform for entities
             ctx.setTransform(1, 0, 0, 1, canvas.width / 2 - camera.x, canvas.height / 2 - camera.y);
@@ -3132,6 +3689,8 @@
                 // Collision with player
                 if (dist < enemy.radius + player.radius) {
                     player.health -= enemy.damage * dt;
+                    const _nowH = performance.now();
+                    if (_nowH - _lastHitSfx > 150) { _lastHitSfx = _nowH; try { playSfx('hit'); } catch (e) { } }
 
                     // Trigger hurt animation occasionally
                     if (Math.random() < 0.05 && player.animState !== 'dead' && player.animState !== 'attack') {
@@ -3142,6 +3701,8 @@
                     if (player.health <= 0) {
                         player.animState = 'dead';
                         player.dead = true;
+                        const _nowD = performance.now();
+                        if (_nowD - _lastDeathSfx > 500) { _lastDeathSfx = _nowD; try { playSfx('death'); } catch (e) { } }
                         setTimeout(() => {
                             gameOver();
                         }, 1000); // Wait for death animation
@@ -3246,12 +3807,14 @@
 
                         if (player.upgrades.includes('crit') && Math.random() < 0.2) {
                             damage *= 2;
+                            try { playSfx('crit'); } catch (e) { }
                         }
 
                         enemy.health -= damage;
 
                         // Explosive strikes - create explosion effect and splash damage
                         if (player.upgrades.includes('explosion') && Math.random() < 0.15) {
+                            try { playSfx('explosion'); } catch (e) { }
                             explosionEffects.push({
                                 x: enemy.x,
                                 y: enemy.y,
@@ -3750,6 +4313,9 @@
 
             // Continue loop
             ctx.setTransform(1, 0, 0, 1, 0, 0);
+            // Foreground grime/scanlines (screen-space)
+            drawAlleyForeLayer();
+
             requestAnimationFrame(gameLoop);
         }
 
@@ -3835,12 +4401,14 @@
             window.bossProjectiles = [];
 
             function spawnWarning(x, y, r, color) {
+                try { playSfx('warn'); } catch (e) { }
                 bossProjectiles.push({
                     x, y, r, color, warning: true, t: performance.now()
                 });
             }
 
             function spawnFireball(x, y, vx, vy) {
+                try { playSfx('fireball'); } catch (e) { }
                 bossProjectiles.push({
                     x, y, vx, vy, r: 10, warning: false
                 });
@@ -3890,6 +4458,7 @@
                         const len = Math.hypot(dx, dy) || 1;
                         boss.vx = (dx / len) * DASH_SPEED;
                         boss.vy = (dy / len) * DASH_SPEED;
+                        try { playSfx('dash'); } catch (e) { }
                         boss._ai.state = "idle";
                     }, WARNING_TIME);
                 }
@@ -3914,7 +4483,8 @@
                     const dx = p.x - player.x;
                     const dy = p.y - player.y;
                     if (Math.hypot(dx, dy) < p.r + 12) {
-                        player.hp -= FIREBALL_DAMAGE;
+                        player.health -= FIREBALL_DAMAGE;
+                        try { playSfx('hit'); } catch (e) { }
                         return false;
                     }
                     return true;
@@ -3933,6 +4503,228 @@
                     ctx.fill();
                 });
             };
+        })();
+    </script>
+
+
+    <script>
+        /* ===============================
+           AUDIO SYSTEM (SFX + MUSIC)
+           - No external assets required (WebAudio)
+           - Music can be toggled in Options
+           - SFX can be toggled in Options
+        ================================= */
+        (function () {
+            const LS_MUSIC = 'bos_music_enabled';
+            const LS_SFX = 'bos_sfx_enabled';
+
+            window.audioSettings = window.audioSettings || {
+                musicEnabled: (localStorage.getItem(LS_MUSIC) ?? '1') === '1',
+                sfxEnabled: (localStorage.getItem(LS_SFX) ?? '1') === '1'
+            };
+
+            let ctx = null;
+            let master = null;
+            let musicGain = null;
+            let sfxGain = null;
+            let musicTimer = null;
+            let musicOsc = null;
+
+            function ensureCtx() {
+                if (ctx) return ctx;
+                const AC = window.AudioContext || window.webkitAudioContext;
+                if (!AC) return null;
+                ctx = new AC();
+                master = ctx.createGain();
+                musicGain = ctx.createGain();
+                sfxGain = ctx.createGain();
+                master.gain.value = 0.9;
+                musicGain.gain.value = window.audioSettings.musicEnabled ? 0.20 : 0.0;
+                sfxGain.gain.value = window.audioSettings.sfxEnabled ? 0.55 : 0.0;
+                musicGain.connect(master);
+                sfxGain.connect(master);
+                master.connect(ctx.destination);
+                return ctx;
+            }
+
+            function unlock() {
+                const c = ensureCtx();
+                if (!c) return;
+                if (c.state === 'suspended') c.resume().catch(() => { });
+                // Start music only after a user gesture
+                if (window.audioSettings.musicEnabled) startMusic();
+                window.removeEventListener('pointerdown', unlock, { passive: true });
+                window.removeEventListener('touchstart', unlock, { passive: true });
+                window.removeEventListener('keydown', unlock);
+            }
+
+            window.addEventListener('pointerdown', unlock, { passive: true });
+            window.addEventListener('touchstart', unlock, { passive: true });
+            window.addEventListener('keydown', unlock);
+
+            function beep({ freq = 440, dur = 0.08, type = 'square', gain = 0.15, slideTo = null } = {}) {
+                const c = ensureCtx();
+                if (!c) return;
+                const o = c.createOscillator();
+                const g = c.createGain();
+                o.type = type;
+                o.frequency.setValueAtTime(freq, c.currentTime);
+                if (slideTo) {
+                    o.frequency.exponentialRampToValueAtTime(Math.max(40, slideTo), c.currentTime + dur);
+                }
+                g.gain.setValueAtTime(0.0001, c.currentTime);
+                g.gain.exponentialRampToValueAtTime(gain, c.currentTime + 0.01);
+                g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
+                o.connect(g);
+                g.connect(sfxGain);
+                o.start();
+                o.stop(c.currentTime + dur + 0.02);
+            }
+
+            window.playSfx = function (name) {
+                if (!window.audioSettings.sfxEnabled) return;
+                // Basic palette (lightweight)
+                switch (name) {
+                    case 'click': beep({ freq: 660, dur: 0.05, type: 'square', gain: 0.10, slideTo: 520 }); break;
+                    case 'pickup': beep({ freq: 880, dur: 0.07, type: 'triangle', gain: 0.12, slideTo: 1200 }); break;
+                    case 'levelup':
+                        beep({ freq: 523.25, dur: 0.08, type: 'triangle', gain: 0.13, slideTo: 659.25 });
+                        setTimeout(() => beep({ freq: 659.25, dur: 0.08, type: 'triangle', gain: 0.13, slideTo: 783.99 }), 80);
+                        setTimeout(() => beep({ freq: 783.99, dur: 0.10, type: 'triangle', gain: 0.13, slideTo: 1046.5 }), 160);
+                        break;
+                    case 'hit': beep({ freq: 180, dur: 0.06, type: 'sawtooth', gain: 0.16, slideTo: 120 }); break;
+                    case 'death':
+                        beep({ freq: 140, dur: 0.10, type: 'sawtooth', gain: 0.18, slideTo: 80 });
+                        setTimeout(() => beep({ freq: 90, dur: 0.12, type: 'sawtooth', gain: 0.18, slideTo: 60 }), 110);
+                        break;
+                    case 'shoot': beep({ freq: 520, dur: 0.04, type: 'square', gain: 0.08, slideTo: 420 }); break;
+                    case 'slash': beep({ freq: 380, dur: 0.06, type: 'triangle', gain: 0.12, slideTo: 520 }); break;
+
+                    case 'explosion': beep({ freq: 120, dur: 0.12, type: 'sawtooth', gain: 0.18, slideTo: 60 }); break;
+                    case 'vampire': beep({ freq: 420, dur: 0.06, type: 'triangle', gain: 0.08, slideTo: 520 }); break;
+                    case 'boomerang': beep({ freq: 520, dur: 0.05, type: 'triangle', gain: 0.05, slideTo: 420 }); break;
+                    case 'arrow': beep({ freq: 900, dur: 0.04, type: 'square', gain: 0.10, slideTo: 1200 }); break;
+                    case 'punch': beep({ freq: 180, dur: 0.05, type: 'square', gain: 0.12, slideTo: 140 }); break;
+                    case 'sword': beep({ freq: 480, dur: 0.06, type: 'triangle', gain: 0.14, slideTo: 760 }); break;
+                    case 'crit':
+                        // bright, short "ping" layered
+                        beep({ freq: 1200, dur: 0.04, type: 'triangle', gain: 0.14, slideTo: 1600 });
+                        setTimeout(() => beep({ freq: 1600, dur: 0.05, type: 'triangle', gain: 0.10, slideTo: 1100 }), 25);
+                        break;
+
+                    case 'dash': beep({ freq: 220, dur: 0.09, type: 'square', gain: 0.12, slideTo: 660 }); break;
+                    case 'fireball': beep({ freq: 300, dur: 0.10, type: 'sawtooth', gain: 0.12, slideTo: 180 }); break;
+                    case 'warn': beep({ freq: 900, dur: 0.06, type: 'square', gain: 0.08, slideTo: 750 }); break;
+                    default: beep({ freq: 440, dur: 0.06, type: 'square', gain: 0.10 }); break;
+                }
+            };
+
+            function startMusic() {
+                const c = ensureCtx();
+                if (!c || musicTimer || !window.audioSettings.musicEnabled) return;
+
+                // One-osc loop with a simple progression (low CPU)
+                const seq = [
+                    261.63, 329.63, 392.00, 329.63, // C E G E
+                    246.94, 311.13, 369.99, 311.13, // B♭ D# F# D#
+                    220.00, 277.18, 329.63, 277.18, // A C# E C#
+                    233.08, 293.66, 349.23, 293.66  // Bb D F D
+                ];
+                let i = 0;
+
+                musicOsc = c.createOscillator();
+                const g = c.createGain();
+                musicOsc.type = 'triangle';
+                g.gain.value = 0.0001;
+                musicOsc.connect(g);
+                g.connect(musicGain);
+                musicOsc.start();
+
+                // Soft attack
+                g.gain.setTargetAtTime(0.16, c.currentTime, 0.06);
+
+                musicTimer = setInterval(() => {
+                    if (!window.audioSettings.musicEnabled) return;
+                    const f = seq[i++ % seq.length];
+                    musicOsc.frequency.setTargetAtTime(f, c.currentTime, 0.02);
+                }, 180);
+            }
+
+            function stopMusic() {
+                if (musicTimer) { clearInterval(musicTimer); musicTimer = null; }
+                if (musicOsc) {
+                    try { musicOsc.stop(); } catch (e) { }
+                    try { musicOsc.disconnect(); } catch (e) { }
+                    musicOsc = null;
+                }
+            }
+
+            window.toggleMusic = function () {
+                window.audioSettings.musicEnabled = !window.audioSettings.musicEnabled;
+                localStorage.setItem(LS_MUSIC, window.audioSettings.musicEnabled ? '1' : '0');
+                ensureCtx();
+                if (musicGain) musicGain.gain.value = window.audioSettings.musicEnabled ? 0.20 : 0.0;
+                if (window.audioSettings.musicEnabled) startMusic(); else stopMusic();
+                updateAudioButtons();
+                try { playSfx('click'); } catch (e) { }
+            };
+
+            window.toggleSfx = function () {
+                window.audioSettings.sfxEnabled = !window.audioSettings.sfxEnabled;
+                localStorage.setItem(LS_SFX, window.audioSettings.sfxEnabled ? '1' : '0');
+                ensureCtx();
+                if (sfxGain) sfxGain.gain.value = window.audioSettings.sfxEnabled ? 0.55 : 0.0;
+                updateAudioButtons();
+                if (window.audioSettings.sfxEnabled) try { playSfx('click'); } catch (e) { }
+            };
+
+            window.updateAudioButtons = function () {
+                const mBtn = document.getElementById('musicToggleBtn');
+                const sBtn = document.getElementById('sfxToggleBtn');
+                if (mBtn) mBtn.textContent = 'Music: ' + (window.audioSettings.musicEnabled ? 'ON' : 'OFF');
+                if (sBtn) sBtn.textContent = 'SFX: ' + (window.audioSettings.sfxEnabled ? 'ON' : 'OFF');
+            };
+
+            // UI clicks -> SFX
+            document.addEventListener('click', (e) => {
+                const t = e.target;
+                if (!t) return;
+                if (t.classList && (t.classList.contains('menu-btn') || t.classList.contains('back-btn'))) {
+                    try { playSfx('click'); } catch (e) { }
+                }
+            });
+
+            // Initialize button labels if options exists
+            window.addEventListener('load', () => {
+                updateAudioButtons();
+            });
+
+        })();
+    </script>
+
+
+    <script>
+        /* ===== Runtime Error Overlay (non-invasive) ===== */
+        (function () {
+            function showErr(msg) {
+                let el = document.getElementById('runtimeErrOverlay');
+                if (!el) {
+                    el = document.createElement('div');
+                    el.id = 'runtimeErrOverlay';
+                    el.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:999999;background:rgba(120,0,0,.88);border:1px solid rgba(255,255,255,.25);color:#fff;padding:10px 12px;border-radius:10px;font:12px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial;white-space:pre-wrap;max-height:45vh;overflow:auto;';
+                    document.body.appendChild(el);
+                }
+                el.textContent = msg;
+            }
+            window.addEventListener('error', (e) => {
+                const msg = 'Runtime error:\n' + (e.error && (e.error.stack || e.error.message) ? (e.error.stack || e.error.message) : (e.message || String(e)));
+                showErr(msg);
+            });
+            window.addEventListener('unhandledrejection', (e) => {
+                const r = e.reason;
+                const msg = 'Unhandled promise rejection:\n' + (r && (r.stack || r.message) ? (r.stack || r.message) : String(r));
+                showErr(msg);
+            });
         })();
     </script>
 
