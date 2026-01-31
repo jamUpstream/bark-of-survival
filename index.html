@@ -2393,6 +2393,10 @@
         // Advanced Sound System
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         const audioCtx = new AudioContext();
+        // Boss music state (declared to avoid ReferenceError)
+        let bossOsc = null;
+        let bossTimer = null;
+
 
         const sounds = {
             playPunch: () => {
@@ -2949,6 +2953,122 @@
         // Enemies
         const enemies = [];
 
+        // PERFORMANCE SAFETY CAPS (prevents freeze from runaway spawns)
+        const MAX_ENEMIES = 260;               // hard cap on active enemies
+        const HORDE_BLOCK_AT = Math.floor(MAX_ENEMIES * 0.85); // block "large horde" when already crowded
+        const DESPAWN_EXTRA = 900;
+        // BOSS EVENT STABILITY (prevents freeze by pausing spawns and clearing mobs)
+        let bossLockdownUntil = 0;      // perf.now() timestamp; during this window only bosses remain
+        let finalBossActive = false;    // final boss phase: no normal spawns until timer ends
+        const finalBossIds = new Set(); // track final bosses (optional)
+
+        function inBossLockdown() {
+            return finalBossActive || (performance.now() < bossLockdownUntil);
+        }
+
+        function purgeNonBossEnemies() {
+            // Remove non-boss enemies immediately to avoid overload during boss events
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const e = enemies[i];
+                if (!e) { enemies.splice(i, 1); continue; }
+                if (!e.isBoss) {
+                    // Also remove DOM sprite so it doesn't get stuck on-screen
+                    try { removeEnemyDomImg(e); } catch (_) { }
+                    enemies.splice(i, 1);
+                }
+            }
+        }
+
+        function startBossLockdown(ms, isFinal = false) {
+            const now = performance.now();
+            if (isFinal) {
+                finalBossActive = true;
+                bossLockdownUntil = Number.POSITIVE_INFINITY;
+            } else {
+                bossLockdownUntil = Math.max(bossLockdownUntil || 0, now + ms);
+            }
+            purgeNonBossEnemies();
+        }
+
+        function stopBossPatterns() {
+            // Stop any repeating boss patterns safely (prevents lingering intervals after bosses die)
+            if (window._spiralFireballInterval) { clearInterval(window._spiralFireballInterval); window._spiralFireballInterval = null; }
+            if (window._waveFireballInterval) { clearInterval(window._waveFireballInterval); window._waveFireballInterval = null; }
+        }
+
+        function updateBossEventState() {
+            // If bosses are gone, end lockdown early so the game doesn't feel "frozen".
+            const now = performance.now();
+
+            if (finalBossActive) {
+                // Final boss: keep arena clear of normal mobs for the rest of the timer
+                purgeNonBossEnemies();
+                // If player somehow killed all final bosses early, allow normal flow (or you can trigger victory early)
+                const aliveFinal = enemies.some(e => e && e.isBoss && e.isFinalBoss && !e.dead);
+                if (!aliveFinal) {
+                    finalBossActive = false;
+                    bossLockdownUntil = 0;
+                    stopBossPatterns();
+                }
+                return;
+            }
+
+            // Non-final boss events: clear mobs for the first 20s, but if bosses are killed sooner, resume immediately
+            if (now < (bossLockdownUntil || 0)) {
+                purgeNonBossEnemies();
+                const aliveEvent = enemies.some(e => e && e.isBoss && e.isEventBoss && !e.dead);
+                if (!aliveEvent) {
+                    bossLockdownUntil = 0;
+                    stopBossPatterns();
+                }
+            }
+        }
+
+        // extra radius beyond viewport to cull off-screen mobs
+
+        function despawnDistance() {
+            // Camera follows player; despawn enemies well outside visible area
+            return Math.max(canvas.width, canvas.height) * 0.9 + DESPAWN_EXTRA;
+        }
+
+        function pruneEnemiesToCap() {
+            if (enemies.length <= MAX_ENEMIES) return;
+
+            // Keep bosses + closest enemies to the player; drop farthest non-boss first
+            const keep = [];
+            const drop = [];
+
+            for (const e of enemies) {
+                if (!e) continue;
+                if (e.isBoss) keep.push(e);
+                else drop.push(e);
+            }
+
+            const px = player.x, py = player.y;
+            keep.sort((a, b) => (Math.hypot(a.x - px, a.y - py)) - (Math.hypot(b.x - px, b.y - py)));
+            drop.sort((a, b) => (Math.hypot(a.x - px, a.y - py)) - (Math.hypot(b.x - px, b.y - py)));
+
+            const merged = [];
+            for (const e of keep) merged.push(e);
+            for (const e of drop) {
+                if (merged.length >= MAX_ENEMIES) break;
+                merged.push(e);
+            }
+
+            // Remove DOM sprites for enemies we are dropping (prevents "stuck" mobs following camera)
+            const keepIds = new Set();
+            for (const e of merged) if (e && e.id) keepIds.add(e.id);
+            for (const e of enemies) {
+                if (e && e.id && !keepIds.has(e.id)) {
+                    try { removeEnemyDomImg(e); } catch (_) { }
+                }
+            }
+
+            enemies.length = 0;
+            for (const e of merged) enemies.push(e);
+        }
+
+
         let enemyIdSeq = 1;
         const enemySpawnRate = 2.0; // seconds (slower initial pace)
         let lastEnemySpawn = 0;
@@ -3311,8 +3431,8 @@
             player.y = WORLD.h / 2;
             camera.x = player.x;
             camera.y = player.y;
-            player.health = char.baseHealth;
-            player.maxHealth = char.baseHealth;
+            player.health = (Number.isFinite(char.baseHealth) ? char.baseHealth : 110);
+            player.maxHealth = (Number.isFinite(char.baseHealth) ? char.baseHealth : 110);
             player.damage = char.baseDamage;
             player.attackRange = char.attackRange;
             player.attackSpeed = char.attackSpeed;
@@ -3376,6 +3496,9 @@
 
             // Reset boss events
             window.triggeredBossEvents = new Set();
+            bossLockdownUntil = 0;
+            finalBossActive = false;
+            finalBossIds.clear();
             if (window._spiralFireballInterval) {
                 clearInterval(window._spiralFireballInterval);
                 window._spiralFireballInterval = null;
@@ -3432,79 +3555,99 @@
         }
 
         function spawnEnemy() {
-            // Spawn in a ring around the player (open-world + camera follow)
-            const spawnDist = Math.max(canvas.width, canvas.height) * 0.38 + 60;
-            const ang = Math.random() * Math.PI * 2;
-            let x = player.x + Math.cos(ang) * spawnDist;
-            let y = player.y + Math.sin(ang) * spawnDist;
+            try {
+                // 1. Safety Checks
+                // Pause normal spawns during boss events / final boss to prevent freezing
+                if (typeof inBossLockdown === "function" && inBossLockdown()) return;
 
-            // Clamp to world bounds
-            x = clamp(x, 40, WORLD.w - 40);
-            y = clamp(y, 40, WORLD.h - 40);
+                // Hard cap for performance
+                if (typeof MAX_ENEMIES !== "undefined" && enemies.length >= MAX_ENEMIES) return;
 
-            // PROGRESSIVE DIFFICULTY SCALING
-            // Combined difficulty ramp: time-based + player power-based
-            const minutesSurvived = (300 - gameTimer) / 60;
+                // 2. Position Calculation
+                // Spawn in a ring around the player (open-world + camera follow)
+                // Using a distance based on canvas size to ensure they spawn off-screen
+                const spawnDist = Math.max(canvas.width, canvas.height) * 0.38 + 60;
+                const ang = Math.random() * Math.PI * 2;
+                let x = player.x + Math.cos(ang) * spawnDist;
+                let y = player.y + Math.sin(ang) * spawnDist;
 
-            // Boss spawning - only after 1 minute of survival
-            const canSpawnBoss = minutesSurvived >= 1.0; // Bosses only spawn after 1 minute
-            const isBoss = canSpawnBoss && Math.random() < 0.04; // 4% chance for boss (only after 1 min)
+                // Clamp to world bounds
+                if (typeof WORLD !== "undefined") {
+                    x = Math.max(40, Math.min(x, WORLD.w - 40));
+                    y = Math.max(40, Math.min(y, WORLD.h - 40));
+                }
 
-            // Time-based scaling: more aggressive as game progresses
-            // 0 min = 1.0x, 1 min = 1.3x, 3 min = 2.0x, 5 min = 3.0x+
-            const timeRamp = 1 + Math.min(2.5, minutesSurvived * 0.4); // up to ~3.5x over 5 minutes
+                // 3. Progressive Difficulty Scaling
+                // Assuming gameTimer is a countdown from 300 seconds
+                const minutesSurvived = Math.max(0, (300 - gameTimer) / 60);
 
-            // Apply player difficulty multiplier (based on character + shop upgrades)
-            const difficultyRamp = timeRamp * (player.difficultyMultiplier || 1.0);
+                // Boss spawning - only after 1 minute of survival
+                const canSpawnBoss = minutesSurvived >= 1.0;
+                const isBoss = canSpawnBoss && Math.random() < 0.04;
 
-            // Additional health scaling as survival time increases (enemies get tankier)
-            const survivalBonus = 1 + (minutesSurvived * 0.15); // +15% health per minute
-            const finalHealthMultiplier = difficultyRamp * survivalBonus;
+                // Time + player level scaling
+                const timeScale = 1 + Math.min(2.8, minutesSurvived * 0.55);
+                const powerScale = 1 + Math.min(2.0, (player.level || 1) * 0.06);
+                const difficulty = timeScale * powerScale * (player.difficultyMultiplier || 1.0);
 
-            // ENHANCED ENEMY BEHAVIORS - assign behavior type
-            let behavior = 'chase'; // default
-            const rand = Math.random();
-            if (!isBoss) {
-                if (rand < 0.15) behavior = 'zigzag'; // 15% zigzag
-                else if (rand < 0.28) behavior = 'circler'; // 13% circler
-                else if (rand < 0.38) behavior = 'rusher'; // 10% rusher
-                else if (rand < 0.45) behavior = 'retreater'; // 7% retreater (hit and run)
+                const baseHp = 18;
+                const baseSpeed = 65;
+
+                const radius = isBoss ? 26 : 16;
+                const spriteScale = isBoss ? 1.35 : 1.0;
+
+                const maxHealth = Math.round(baseHp * difficulty * (isBoss ? 18 : 1));
+                const speed = (baseSpeed * (isBoss ? 0.85 : 1.0)) * (1 + Math.min(0.7, minutesSurvived * 0.08));
+
+                const id = "e" + (enemyIdSeq++);
+
+                // 4. Push to enemies array
+                enemies.push({
+                    id,
+                    x, y,
+                    vx: 0, vy: 0,
+                    radius,
+                    spriteScale,
+                    speed,
+                    health: maxHealth,
+                    maxHealth,
+                    isBoss,
+                    dead: false,
+                    deadTimer: 0,
+                    hurtTimer: 0,
+                    facingRight: true,
+
+                    // movement variants used by update loop
+                    behavior: Math.random() < 0.15 ? "circler" : (Math.random() < 0.12 ? "zigzag" : "chaser"),
+                    circlerAngle: Math.random() * Math.PI * 2,
+                    zigzagPhase: 0,
+
+                    // float/wobble used by sprite renderer
+                    floatSpeed: (isBoss ? 1.35 : 1.7) + Math.random() * 0.9,
+                    floatOffset: Math.random() * Math.PI * 2,
+                    wobbleSeed: Math.random() * 9999,
+
+                    // dash / fireball support
+                    dashCooldown: isBoss ? 5000 : 0,
+                    lastDash: 0,
+                    isDashing: false,
+                    dashSpeed: 300,
+                    dashDuration: 0.5,
+                    dashTimer: 0,
+                    dashDirX: 0,
+                    dashDirY: 0,
+
+                    fireballCooldown: isBoss ? 3000 : 0,
+                    lastFireball: 0,
+
+                    // final boss volley support
+                    multiStrikeShots: 1,
+                    isFinalBoss: false
+                });
+
+            } catch (error) {
+                console.error("Spawn enemy error:", error);
             }
-
-            enemies.push({
-                x,
-                y,
-                id: 'e' + (enemyIdSeq++),
-                spriteScale: isBoss ? 0.95 : 0.7,
-                hurtTimer: 0,
-                dead: false,
-                deadTimer: 0,
-                radius: isBoss ? 36 : 26,
-                health: (isBoss ? 70 : 16) * finalHealthMultiplier,
-                maxHealth: (isBoss ? 70 : 16) * finalHealthMultiplier,
-                damage: (isBoss ? 10 : 3) * difficultyRamp,
-                speed: (isBoss ? 82 : 112) * (0.9 + Math.random() * 0.25) * Math.min(1.3, 1 + (player.difficultyMultiplier - 1) * 0.5), // Speed increases slightly with difficulty
-                isBoss,
-                behavior, // NEW: behavior type
-                behaviorTimer: 0, // NEW: for behavior timing
-                circleAngle: Math.random() * Math.PI * 2, // NEW: for circler
-                zigzagPhase: 0, // NEW: for zigzag
-                facingRight: true, // Will be updated based on movement
-                // IMPORTANT: used by render (missing this makes floatY NaN -> ghost not drawn)
-                floatSpeed: (isBoss ? 1.35 : 1.7) + Math.random() * 0.9,
-                floatOffset: Math.random() * Math.PI * 2,
-                wobbleSeed: Math.random() * 9999,
-                dashCooldown: isBoss ? 5000 : 0,
-                lastDash: 0,
-                isDashing: false,
-                dashSpeed: 300,
-                dashDuration: 0.5,
-                dashTimer: 0,
-                dashDirX: 0,
-                dashDirY: 0,
-                fireballCooldown: isBoss ? 3000 : 0,
-                lastFireball: 0
-            });
         }
 
         function spawnXPOrb(x, y, value) {
@@ -4236,50 +4379,53 @@
         // SPECIAL BOSS EVENT SYSTEM
         function triggerBossEvent(minuteRemaining) {
             try {
-                const now = performance.now();
-
-                // Spawn multiple bosses for each event
                 const minutesSurvived = (300 - gameTimer) / 60;
                 const difficultyRamp = (1 + Math.min(2.5, minutesSurvived * 0.4)) * (player.difficultyMultiplier || 1.0);
 
                 switch (minuteRemaining) {
                     case 4:
                         // 4 minutes left - First Boss (1 boss)
+                        startBossLockdown(20000, false);
                         showToastNotification('⚠️ BOSS EVENT: SHADOW BEAST! ⚠️', '#ff0000');
                         try { playSfx('warn'); } catch (e) { }
                         setTimeout(() => {
-                            spawnEventBoss(4, difficultyRamp, 1); // Spawn 1 boss
+                            spawnEventBoss(4, difficultyRamp, 1);
                         }, 2000);
                         break;
 
                     case 3:
                         // 3 minutes left - Cross Boss (2 bosses)
+                        startBossLockdown(20000, false);
                         showToastNotification('⚠️ BOSS EVENT: CROSSFIRE DEMONS! ⚠️', '#ff0000');
                         try { playSfx('warn'); } catch (e) { }
                         setTimeout(() => {
-                            spawnEventBoss(3, difficultyRamp, 2); // Spawn 2 bosses
+                            spawnEventBoss(3, difficultyRamp, 2);
                             spawnCrossFireballs();
                         }, 2000);
                         break;
 
                     case 2:
                         // 2 minutes left - Wave Boss (3 bosses)
+                        startBossLockdown(20000, false);
                         showToastNotification('⚠️ BOSS EVENT: TSUNAMI DEMONS! ⚠️', '#ff0000');
                         try { playSfx('warn'); } catch (e) { }
                         setTimeout(() => {
-                            spawnEventBoss(2, difficultyRamp, 3); // Spawn 3 bosses
+                            spawnEventBoss(2, difficultyRamp, 3);
                             spawnWaveFireballs();
                         }, 2000);
                         break;
 
                     case 1:
-                        // 1 minute left - FINAL BOSS (5 bosses)
-                        showToastNotification('🔥 FINAL BOSS: SPIRAL DEMONS! 🔥', '#ff0000');
+                        // 1 minute left - FINAL BOSS (5 demon warlords, no normal spawns until timer ends)
+                        startBossLockdown(99999999, true);
+                        showToastNotification('🔥 FINAL BOSS: DEMON WARLORDS! 🔥', '#ff0000');
                         try { playSfx('warn'); } catch (e) { }
                         setTimeout(() => {
-                            spawnEventBoss(1, difficultyRamp, 5); // Spawn 5 bosses
-                            spawnSpiralFireballs();
+                            spawnEventBoss(1, difficultyRamp, 5);
                         }, 2000);
+                        break;
+
+                    default:
                         break;
                 }
             } catch (error) {
@@ -4295,22 +4441,38 @@
             }
 
             try {
+
+                // Spawn positions: deterministic angles (prevents bosses stacking in same direction)
+                const baseAngle = Math.random() * Math.PI * 2;
+                function spawnPos(i, total, baseDist) {
+                    const ang = baseAngle + (Math.PI * 2 / total) * i;
+                    // Reduce dist until inside bounds (avoids clamp collapsing multiple bosses into same corner)
+                    let dist = baseDist;
+                    let x, y;
+                    for (let k = 0; k < 8; k++) {
+                        x = player.x + Math.cos(ang) * dist;
+                        y = player.y + Math.sin(ang) * dist;
+                        if (x > 60 && x < WORLD.w - 60 && y > 60 && y < WORLD.h - 60) break;
+                        dist *= 0.82;
+                    }
+                    x = clamp(x, 60, WORLD.w - 60);
+                    y = clamp(y, 60, WORLD.h - 60);
+                    return { x, y, ang };
+                }
                 // Spawn multiple bosses in different positions
                 for (let b = 0; b < count; b++) {
-                    // Spawn near player but not too close, spread out if multiple
-                    const spawnDist = 350 + (b * 100); // Spread out multiple bosses
-                    const ang = (Math.PI * 2 / count) * b + Math.random() * 0.5; // Evenly distribute around player
-                    let x = player.x + Math.cos(ang) * spawnDist;
-                    let y = player.y + Math.sin(ang) * spawnDist;
-
-                    // Clamp to world bounds
-                    x = clamp(x, 40, WORLD.w - 40);
-                    y = clamp(y, 40, WORLD.h - 40);
-
+                    // Spawn near player, evenly spaced (prevents stacking)
+                    const baseDist = 360 + (eventNumber * 30) + (b * 40);
+                    const pos = spawnPos(b, count, baseDist);
+                    let x = pos.x;
+                    let y = pos.y;
                     // Boss stats scale with event number (later bosses are stronger)
                     const baseHealth = 500 + (eventNumber * 200); // 700, 900, 1100, 1300 (much tankier)
                     const baseDamage = 15 + (eventNumber * 5); // 20, 25, 30, 35 (more dangerous)
                     const bossSpeed = 70 + (eventNumber * 10); // 80, 90, 100, 110
+
+                    // FINAL BOSS: use demon warlords with multi-strike projectile volley (lighter than spiral patterns)
+                    const isFinal = (eventNumber === 1);
 
                     // Scale health with player level to keep bosses challenging
                     const levelScaling = 1 + (player.level * 0.15); // +15% health per player level
@@ -4348,9 +4510,12 @@
                         dashTimer: 0,
                         dashDirX: 0,
                         dashDirY: 0,
-                        fireballCooldown: 2000, // Faster fireball attacks
-                        lastFireball: 0
+                        fireballCooldown: isFinal ? 1100 : 2000, // Final boss: faster but capped volley
+                        lastFireball: 0,
+                        multiStrikeShots: isFinal ? 3 : 1,
+                        isFinalBoss: isFinal
                     });
+                    if (isFinal) finalBossIds.add(enemies[enemies.length - 1].id);
                 }
             } catch (error) {
                 console.error("Spawn boss error:", error);
@@ -4583,6 +4748,14 @@
             gameState.lastFrame = now;
             dt = Math.min(0.033, Math.max(0.001, dt)); // clamp (30-1000 fps)
             dt *= TIME_SCALE;
+
+            // Safety: prevent NaN health breaking UI/logic
+            if (!Number.isFinite(player.health)) player.health = player.maxHealth || 110;
+            if (!Number.isFinite(player.maxHealth)) player.maxHealth = 110;
+            player.health = Math.max(0, Math.min(player.health, player.maxHealth));
+
+            // Boss event housekeeping (prevents 'frozen' state after bosses die)
+            try { updateBossEventState(); } catch (e) { console.error('updateBossEventState error', e); }
             // Debug: Log if game speed seems wrong
             if (dt > 0.05) {
                 console.warn('Large dt detected:', dt, 'frames may be skipping');
@@ -4665,6 +4838,11 @@
                     window.triggeredBossEvents.add(1);
                     triggerBossEvent(1); // 1 minute remaining - FINAL BOSS EVENT
                 }
+            }
+
+            // Boss lockdown: keep fights clean (prevents spawn overload/freezes)
+            if (inBossLockdown()) {
+                purgeNonBossEnemies();
             }
 
             // Regeneration
@@ -4816,6 +4994,16 @@
 
 
 
+                // Skip horde during boss lockdown (boss fights should be clean)
+                if (inBossLockdown()) {
+                    return;
+                }
+
+                // If we're already near the cap, skip the horde to avoid freezing
+                if (enemies.length >= HORDE_BLOCK_AT) {
+                    return;
+                }
+
                 // Show warning toast
                 showToastNotification('⚠️ LARGE HORDE INCOMING! ⚠️', '#ff3333');
                 try { playSfx('warn'); } catch (e) { }
@@ -4828,7 +5016,7 @@
 
                     for (let i = 0; i < hordeSize; i++) {
                         setTimeout(() => {
-                            spawnEnemy();
+                            if (!inBossLockdown() && enemies.length < MAX_ENEMIES) spawnEnemy();
                         }, i * 80); // Stagger spawns slightly
                     }
                 }, 3000);
@@ -5133,16 +5321,31 @@
                     // Fireball attack
                     if (now - enemy.lastFireball > enemy.fireballCooldown) {
                         enemy.lastFireball = now;
+
+                        // Cap boss projectiles to prevent lag
+                        const MAX_BOSS_FIREBALLS_DYNAMIC = finalBossActive ? 140 : 220;
+                        if (bossFireballs.length > MAX_BOSS_FIREBALLS_DYNAMIC) {
+                            bossFireballs.splice(0, bossFireballs.length - MAX_BOSS_FIREBALLS_DYNAMIC);
+                        }
+
                         const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
-                        bossFireballs.push({
-                            x: enemy.x,
-                            y: enemy.y,
-                            vx: Math.cos(angle) * 200,
-                            vy: Math.sin(angle) * 200,
-                            radius: 15,
-                            damage: 20,
-                            lifetime: 5
-                        });
+                        const shots = Math.max(1, enemy.multiStrikeShots || 1);
+                        const spread = (shots > 1) ? 0.18 : 0;
+
+                        for (let s = 0; s < shots; s++) {
+                            const t = shots === 1 ? 0 : (s - (shots - 1) / 2);
+                            const a = angle + t * spread;
+
+                            bossFireballs.push({
+                                x: enemy.x,
+                                y: enemy.y,
+                                vx: Math.cos(a) * (finalBossActive ? 210 : 200),
+                                vy: Math.sin(a) * (finalBossActive ? 210 : 200),
+                                radius: 15,
+                                damage: finalBossActive ? 18 : 20,
+                                lifetime: 5
+                            });
+                        }
                     }
                 }
 
@@ -5245,7 +5448,18 @@
             if (projectiles.length > 650) projectiles.splice(0, projectiles.length - 650);
             if (bossFireballs.length > 320) bossFireballs.splice(0, bossFireballs.length - 320);
             if (xpOrbs.length > 420) xpOrbs.splice(0, xpOrbs.length - 420);
-            if (enemies.length > 520) enemies.splice(0, enemies.length - 520);
+            // Distance-based culling + hard cap (prevents mid/late-run freezing)
+            const dd = despawnDistance();
+            for (let ei = enemies.length - 1; ei >= 0; ei--) {
+                const e = enemies[ei];
+                if (!e) { enemies.splice(ei, 1); continue; }
+                if (e.isBoss) continue;          // never despawn bosses via distance
+                if (e.dead) continue;            // allow death animation
+                const d = Math.hypot(e.x - player.x, e.y - player.y);
+                if (d > dd) { try { removeEnemyDomImg(e); } catch (_) { } enemies.splice(ei, 1); }
+            }
+
+            pruneEnemiesToCap();
 
             for (let i = projectiles.length - 1; i >= 0; i--) {
                 const proj = projectiles[i];
@@ -6262,12 +6476,19 @@
 
                     setTimeout(() => {
                         const len = Math.hypot(dx, dy) || 1;
-                        spawnFireball(
-                            boss.x,
-                            boss.y,
-                            (dx / len) * FIREBALL_SPEED,
-                            (dy / len) * FIREBALL_SPEED
-                        );
+                        const shots = Math.max(1, boss.multiStrikeShots || 1);
+                        const baseAng = Math.atan2(dy, dx);
+                        const spread = (shots === 1) ? 0 : (Math.PI / 24); // ~7.5deg
+                        for (let i = 0; i < shots; i++) {
+                            const t = (shots === 1) ? 0 : (i - (shots - 1) / 2);
+                            const a = baseAng + t * spread;
+                            spawnFireball(
+                                boss.x,
+                                boss.y,
+                                Math.cos(a) * FIREBALL_SPEED,
+                                Math.sin(a) * FIREBALL_SPEED
+                            );
+                        }
                         boss._ai.state = "idle";
                     }, WARNING_TIME);
                 }
