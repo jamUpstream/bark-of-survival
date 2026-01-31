@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport"
-        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+        content="width=device-width, initial-scale=0.5, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, orientation=landscape">
     <title>Bark of Survival</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@400;700&family=Rajdhani:wght@400;600;700&display=swap');
@@ -710,6 +710,50 @@
         }
 
         /* Responsive */
+
+        /* Stats Panel */
+        #statsPanel {
+            position: fixed;
+            top: 50%;
+            left: 20px;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid var(--gold);
+            padding: 1rem;
+            max-width: 250px;
+            display: none;
+            z-index: 90;
+            font-family: 'Rajdhani', sans-serif;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+        }
+
+        .stats-panel-title {
+            font-family: 'Bebas Neue';
+            color: var(--gold);
+            font-size: 1.2rem;
+            margin-bottom: 0.8rem;
+            text-align: center;
+            border-bottom: 1px solid var(--gold);
+            padding-bottom: 0.5rem;
+        }
+
+        .stats-panel-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.3rem 0;
+            font-size: 0.9rem;
+            border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+        }
+
+        .stats-panel-label {
+            color: #aaa;
+        }
+
+        .stats-panel-value {
+            color: #fff;
+            font-weight: 600;
+        }
+
         @media (max-width: 768px) {
             .game-title {
                 font-size: 3.2rem;
@@ -729,6 +773,21 @@
             .stats-container {
                 flex-direction: column;
             }
+
+            #statsPanel {
+                left: 10px;
+                max-width: 200px;
+                padding: 0.8rem;
+            }
+
+            .stats-panel-title {
+                font-size: 1rem;
+            }
+
+            .stats-panel-item {
+                font-size: 0.8rem;
+            }
+
         }
 
         /* Keep animated GIF <img> elements in the DOM so browsers advance frames */
@@ -1297,11 +1356,172 @@
                 width: 520px;
             }
         }
+
+        /* Upgrade Activation Animations */
+        @keyframes upgradeActivate {
+            0% {
+                transform: scale(0.5);
+                opacity: 0;
+            }
+
+            50% {
+                transform: scale(1.3);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 0;
+            }
+        }
+
+        .upgrade-flash {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            animation: upgradeActivate 1s ease-out forwards;
+        }
+
+        @keyframes permanentGlow {
+
+            0%,
+            100% {
+                opacity: 0.6;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 1;
+                transform: scale(1.1);
+            }
+        }
+
+
+        /* Landscape Mode Enforcement for Mobile */
+        @media (max-width: 768px) {
+            body {
+                zoom: 0.5;
+                /* 50% zoom for mobile */
+                -moz-transform: scale(0.5);
+                -moz-transform-origin: 0 0;
+            }
+        }
+
+        /* Portrait Mode Warning Overlay */
+        #landscapeWarning {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 99999;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        #landscapeWarning .rotate-icon {
+            font-size: 5rem;
+            margin-bottom: 2rem;
+            animation: rotateDevice 2s ease-in-out infinite;
+        }
+
+        #landscapeWarning h2 {
+            font-family: 'Cinzel', serif;
+            font-size: 2rem;
+            color: var(--gold);
+            margin-bottom: 1rem;
+            text-shadow: 0 0 20px rgba(212, 175, 55, 0.6);
+        }
+
+        #landscapeWarning p {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.2rem;
+            color: #aaa;
+            max-width: 400px;
+        }
+
+        @keyframes rotateDevice {
+
+            0%,
+            100% {
+                transform: rotate(0deg);
+            }
+
+            25% {
+                transform: rotate(-90deg);
+            }
+
+            50% {
+                transform: rotate(-90deg);
+            }
+
+            75% {
+                transform: rotate(-90deg);
+            }
+        }
+
+        /* Desktop - no zoom */
+        @media (min-width: 769px) {
+            body {
+                zoom: 1;
+            }
+        }
     </style>
 </head>
 
 <body>
+
+    <!-- Landscape Mode Warning (Mobile Only) -->
+    <div id="landscapeWarning">
+        <div class="rotate-icon">📱 ↻</div>
+        <h2>ROTATE YOUR DEVICE</h2>
+        <p>Please rotate your device to landscape mode for the best gaming experience.</p>
+    </div>
+
     <div id="gifPreload" aria-hidden="true"></div>
+
+    <!-- Stats Panel -->
+    <div id="statsPanel">
+        <div class="stats-panel-title">CURRENT STATS</div>
+        <div class="stats-panel-item">
+            <span class="stats-panel-label">Damage:</span>
+            <span class="stats-panel-value" id="statDamage">0</span>
+        </div>
+        <div class="stats-panel-item">
+            <span class="stats-panel-label">Attack Speed:</span>
+            <span class="stats-panel-value" id="statAttackSpeed">0</span>
+        </div>
+        <div class="stats-panel-item">
+            <span class="stats-panel-label">Move Speed:</span>
+            <span class="stats-panel-value" id="statMoveSpeed">0</span>
+        </div>
+        <div class="stats-panel-item">
+            <span class="stats-panel-label">Crit Chance:</span>
+            <span class="stats-panel-value" id="statCritChance">0%</span>
+        </div>
+        <div class="stats-panel-item">
+            <span class="stats-panel-label">Max HP:</span>
+            <span class="stats-panel-value" id="statMaxHP">0</span>
+        </div>
+        <div class="stats-panel-item">
+            <span class="stats-panel-label">Defense:</span>
+            <span class="stats-panel-value" id="statDefense">0</span>
+        </div>
+        <div class="stats-panel-item">
+            <span class="stats-panel-label">XP Mult:</span>
+            <span class="stats-panel-value" id="statXPMult">1x</span>
+        </div>
+        <div class="stats-panel-item">
+            <span class="stats-panel-label">Dodge:</span>
+            <span class="stats-panel-value" id="statDodge">0%</span>
+        </div>
+    </div>
+
     <!-- Main Menu -->
     <div id="mainMenu">
         <h1 class="game-title">BARK OF SURVIVAL</h1>
@@ -1787,7 +2007,8 @@
         tileset.src = TILESET_PATH;
 
         const CAMERA_LERP = 0.12; // lower = smoother (more floaty)
-        const TIME_SCALE = 0.80;  // global pacing (lower = slower)
+        const TIME_SCALE = 0.80;  // global pacing (lower = slower) - CONSTANT, never modify!
+        Object.freeze({ TIME_SCALE }); // Ensure it cannot be changed
 
         function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
@@ -2440,8 +2661,20 @@
         const upgradePool = [
             { name: 'Health Boost', description: '+20 Max Health', apply: (p) => { p.maxHealth += 20; p.health += 20; } },
             { name: 'Damage Up', description: '+5 Damage', apply: (p) => { p.damage += 5; } },
-            { name: 'Attack Speed', description: '+20% Faster Attacks', apply: (p) => { p.attackSpeed *= 0.8; } },
-            { name: 'Move Speed', description: '+15% Movement Speed', apply: (p) => { p.moveSpeed *= 1.15; } },
+            {
+                name: 'Attack Speed', description: '+20% Faster Attacks', apply: (p) => {
+                    const oldSpeed = p.attackSpeed;
+                    p.attackSpeed *= 0.8;
+                    console.log('Attack Speed upgraded:', oldSpeed, '->', p.attackSpeed);
+                }
+            },
+            {
+                name: 'Move Speed', description: '+15% Movement Speed', apply: (p) => {
+                    const oldSpeed = p.moveSpeed;
+                    p.moveSpeed *= 1.15;
+                    console.log('Move Speed upgraded:', oldSpeed, '->', p.moveSpeed);
+                }
+            },
             { name: 'Extended Range', description: '+30% Attack Range', apply: (p) => { p.attackRange *= 1.3; } },
             { name: 'Life Steal', description: 'Heal 2 HP per kill', apply: (p) => { p.upgrades.push('lifesteal'); } },
             { name: 'Double Shot', description: 'Fire 2 additional projectiles', apply: (p) => { p.upgrades.push('doubleshot'); } },
@@ -2466,14 +2699,14 @@
             { name: 'Explosive Strikes', description: 'Attacks have 15% splash damage', apply: (p) => { p.upgrades.push('explosion'); } },
             { name: 'Ghost Shield', description: 'Absorb next 20 damage', apply: (p) => { p.shield = (p.shield || 0) + 20; } },
             { name: 'Rapid Fire', description: '+30% Attack Speed', apply: (p) => { p.attackSpeed *= 0.7; } },
-            { name: 'Berserker', description: '+10 Damage, -10 Max HP', apply: (p) => { p.damage += 10; p.maxHealth -= 10; p.health = Math.min(p.health, p.maxHealth); } },
+            { name: 'Berserker', description: '+10 Damage, -10 Max HP', apply: (p) => { p.damage += 10; p.maxHealth -= 10; p.health = Math.min(p.health, p.maxHealth); p.berserker = true; p.upgrades.push('berserker'); } },
             { name: 'Multi-Strike', description: 'Fire 5 projectiles in spread', apply: (p) => { p.upgrades.push('multishot'); } },
             { name: 'Bloodlust', description: '+2% damage per kill', apply: (p) => { p.upgrades.push('bloodlust'); } },
             // NEW UPGRADES AND PASSIVES
             { name: 'Thorns', description: 'Reflect 25% damage to attackers', apply: (p) => { p.upgrades.push('thorns'); } },
             { name: 'Dodge Master', description: '15% chance to dodge attacks', apply: (p) => { p.upgrades.push('dodge'); } },
             { name: 'Burning Rage', description: 'Attacks burn enemies for 3s', apply: (p) => { p.upgrades.push('burn'); } },
-            { name: 'Frost Touch', description: 'Slow enemies by 30% for 2s', apply: (p) => { p.upgrades.push('frost'); } },
+            { name: 'Frost Touch', description: 'Slow enemies by 30% for 2s', apply: (p) => { p.upgrades.push('frost'); p.frostTouch = true; } },
             { name: 'Chain Lightning', description: 'Attacks jump to nearby foes', apply: (p) => { p.upgrades.push('chain'); } },
             { name: 'Fortified', description: '+15% Damage Reduction', apply: (p) => { p.damageReduction = (p.damageReduction || 0) + 0.15; } },
             { name: 'Lucky Strike', description: '+10% Critical Chance', apply: (p) => { p.critBonus = (p.critBonus || 0) + 0.1; } },
@@ -2481,7 +2714,7 @@
             { name: 'Treasure Hunter', description: 'Enemies drop 30% more XP', apply: (p) => { p.xpBonus = (p.xpBonus || 1) * 1.3; } },
             { name: 'Iron Will', description: '+40 Max Health', apply: (p) => { p.maxHealth += 40; p.health += 40; } },
             { name: 'Fury', description: '+10 Damage', apply: (p) => { p.damage += 10; } },
-            { name: 'Lightning Speed', description: '+25% Movement Speed', apply: (p) => { p.moveSpeed *= 1.25; } },
+            { name: 'Lightning Speed', description: '+25% Movement Speed', apply: (p) => { p.moveSpeed *= 1.25; p.lightningSpeedPermanent = true; p.lightningSpeedActive = true; } },
         ];
 
         // Menu functions
@@ -2493,8 +2726,9 @@
 
         // Toast notification system for warnings
         function showToastNotification(message, color = '#d4af37') {
-            const toast = document.createElement('div');
-            toast.style.cssText = `
+            try {
+                const toast = document.createElement('div');
+                toast.style.cssText = `
                 position: fixed;
                 top: 50%;
                 left: 50%;
@@ -2512,14 +2746,17 @@
                 box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
                 animation: toastPulse 0.5s ease-in-out;
             `;
-            toast.textContent = message;
-            document.body.appendChild(toast);
+                toast.textContent = message;
+                document.body.appendChild(toast);
 
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                toast.style.transition = 'opacity 0.5s';
-                setTimeout(() => toast.remove(), 500);
-            }, 2500);
+                setTimeout(() => {
+                    toast.style.opacity = '0';
+                    toast.style.transition = 'opacity 0.5s';
+                    setTimeout(() => toast.remove(), 500);
+                }, 2500);
+            } catch (error) {
+                console.error("Toast notification error:", error);
+            }
         }
 
         function showShop() {
@@ -2557,6 +2794,7 @@
             if (gameState.screen === 'playing') {
                 gameState.screen = 'menu';
                 document.getElementById('hud').style.display = 'none';
+                document.getElementById('statsPanel').style.display = 'none';
             }
         }
 
@@ -2715,6 +2953,8 @@
             document.getElementById('mainMenu').style.display = 'none';
             document.getElementById('hud').style.display = 'block';
 
+            document.getElementById('statsPanel').style.display = 'block';
+
             // Show mobile controls if on mobile device
             const mobileControls = document.getElementById('mobileControls');
             if (mobileControls && window.innerWidth <= 768) {
@@ -2802,9 +3042,25 @@
             // Update HUD
             updateHUD();
 
+            updateStatsPanel();
+
             // Start game loop
             gameState.screen = 'playing';
             gameLoop();
+        }
+
+
+        function updateStatsPanel() {
+            if (!player) return;
+
+            document.getElementById('statDamage').textContent = Math.floor(player.damage);
+            document.getElementById('statAttackSpeed').textContent = player.attackSpeed.toFixed(2);
+            document.getElementById('statMoveSpeed').textContent = player.moveSpeed.toFixed(2);
+            document.getElementById('statCritChance').textContent = (player.critBonus ? Math.floor(player.critBonus * 100) : 0) + '%';
+            document.getElementById('statMaxHP').textContent = player.maxHealth;
+            document.getElementById('statDefense').textContent = (player.damageReduction ? Math.floor(player.damageReduction * 100) : 0) + '%';
+            document.getElementById('statXPMult').textContent = (player.xpBonus || 1).toFixed(2) + 'x';
+            document.getElementById('statDodge').textContent = (player.upgrades.includes('dodge') ? '15' : '0') + '%';
         }
 
         function updateHUD() {
@@ -2977,15 +3233,194 @@
             });
         }
 
+
+        function showUpgradeAnimation(upgradeName, player) {
+            if (!player) return;
+
+            const colors = {
+                shield: '#00ffff',
+                bloodlust: '#ff0000',
+                fortified: '#ffa500',
+                xpMagnet: '#1e90ff',
+                treasureHunter: '#ffd700',
+                luckyStrike: '#ffff00',
+                ironWill: '#ffffff',
+                fury: '#ff00ff',
+                lightningSpeed: '#ffff00',
+                berserker: '#8B0000',
+                frostTouch: '#00ffff',
+                // New upgrade colors
+                damage: '#ff4444',
+                attackSpeed: '#ff8800',
+                moveSpeed: '#44ff44',
+                health: '#00ff00',
+                vampire: '#cc0066',
+                explosion: '#ff6600',
+                rapidFire: '#ffaa00',
+                multiStrike: '#aa00ff',
+                thorns: '#996633',
+                dodge: '#66ccff',
+                burn: '#ff3300',
+                chain: '#ccff00',
+                generic: '#d4af37'
+            };
+
+            const names = {
+                shield: 'GHOST SHIELD',
+                bloodlust: 'BLOODLUST',
+                fortified: 'FORTIFIED',
+                xpMagnet: 'XP MAGNET',
+                treasureHunter: 'TREASURE HUNTER',
+                luckyStrike: 'LUCKY STRIKE',
+                ironWill: 'IRON WILL',
+                fury: 'FURY',
+                lightningSpeed: 'LIGHTNING SPEED',
+                berserker: 'BERSERKER',
+                frostTouch: 'FROST TOUCH',
+                // New upgrade display names
+                damage: 'DAMAGE BOOST',
+                attackSpeed: 'ATTACK SPEED',
+                moveSpeed: 'MOVE SPEED',
+                health: 'MAX HEALTH',
+                vampire: 'VAMPIRIC AURA',
+                explosion: 'EXPLOSIVE STRIKES',
+                rapidFire: 'RAPID FIRE',
+                multiStrike: 'MULTI-STRIKE',
+                thorns: 'THORNS',
+                dodge: 'DODGE MASTER',
+                burn: 'BURNING RAGE',
+                chain: 'CHAIN LIGHTNING',
+                generic: 'UPGRADE'
+            };
+
+            const color = colors[upgradeName] || '#ffffff';
+            const displayName = names[upgradeName] || upgradeName.toUpperCase();
+
+            // Create on-screen flash effect
+            const flash = document.createElement('div');
+            flash.className = 'upgrade-flash';
+            flash.style.cssText = `
+                position: fixed;
+                left: 50%;
+                top: 50%;
+                transform: translate(-50%, -50%);
+                font-size: 3rem;
+                font-family: 'Bebas Neue', cursive;
+                color: ${color};
+                text-shadow: 0 0 20px ${color}, 0 0 40px ${color};
+                pointer-events: none;
+                z-index: 9999;
+                animation: upgradeActivate 1s ease-out forwards;
+            `;
+            flash.textContent = `⚡ ${displayName} ⚡`;
+            document.body.appendChild(flash);
+
+            setTimeout(() => {
+                flash.remove();
+            }, 1000);
+
+            // Create particle burst at player position
+            if (!gameState || !gameState.particles) return;
+
+            const particleCount = 20;
+            for (let i = 0; i < particleCount; i++) {
+                const angle = (Math.PI * 2 * i) / particleCount;
+                const speed = 3 + Math.random() * 2;
+                const size = 3 + Math.random() * 3;
+
+                gameState.particles.push({
+                    x: player.x,
+                    y: player.y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 30 + Math.random() * 20,
+                    maxLife: 30,
+                    color: color,
+                    size: size
+                });
+            }
+
+            // Add pulsing ring
+            let ringScale = 0;
+            const ringInterval = setInterval(() => {
+                ringScale += 0.15;
+
+                if (gameState && gameState.particles && player) {
+                    const ringSize = (player.size || 20) * (1 + ringScale * 2);
+                    const segments = 16;
+
+                    for (let i = 0; i < segments; i++) {
+                        const angle = (Math.PI * 2 * i) / segments;
+                        const px = player.x + Math.cos(angle) * ringSize;
+                        const py = player.y + Math.sin(angle) * ringSize;
+
+                        gameState.particles.push({
+                            x: px,
+                            y: py,
+                            vx: Math.cos(angle) * 0.5,
+                            vy: Math.sin(angle) * 0.5,
+                            life: 15,
+                            maxLife: 15,
+                            color: color,
+                            size: 3
+                        });
+                    }
+                }
+
+                if (ringScale >= 1.5) {
+                    clearInterval(ringInterval);
+                }
+            }, 50);
+        }
+
         function selectUpgrade(upgrade) {
             upgrade.apply(player);
+
+            // Show upgrade animation based on upgrade type
+            const upgradeName = upgrade.name || '';
+            const animationUpgrades = {
+                'Ghost Shield': 'shield',
+                'Bloodlust': 'bloodlust',
+                'Fortified': 'fortified',
+                'XP Magnet': 'xpMagnet',
+                'Treasure Hunter': 'treasureHunter',
+                'Lucky Strike': 'luckyStrike',
+                'Iron Will': 'ironWill',
+                'Fury': 'fury',
+                'Lightning Speed': 'lightningSpeed',
+                'Berserker': 'berserker',
+                'Frost Touch': 'frostTouch',
+                // Add animations for other common upgrades
+                'Damage Boost': 'damage',
+                'Attack Speed': 'attackSpeed',
+                'Move Speed': 'moveSpeed',
+                'Max Health': 'health',
+                'Vampiric Aura': 'vampire',
+                'Explosive Strikes': 'explosion',
+                'Rapid Fire': 'rapidFire',
+                'Multi-Strike': 'multiStrike',
+                'Thorns': 'thorns',
+                'Dodge Master': 'dodge',
+                'Burning Rage': 'burn',
+                'Chain Lightning': 'chain'
+            };
+
+            if (animationUpgrades[upgradeName]) {
+                showUpgradeAnimation(animationUpgrades[upgradeName], player);
+            } else {
+                // Show generic animation for upgrades without specific mapping
+                showUpgradeAnimation('generic', player);
+            }
             document.getElementById('levelUpScreen').style.display = 'none';
             gameState.screen = 'playing';
             updateHUD();
 
-            // Resume game loop immediately
+            // Resume game loop (only if not already running)
             ctx.setTransform(1, 0, 0, 1, 0, 0);
-            requestAnimationFrame(gameLoop);
+            if (!gameState.loopRunning) {
+                gameState.loopRunning = true;
+                requestAnimationFrame(gameLoop);
+            }
         }
 
         function attack() {
@@ -3206,7 +3641,7 @@
                     }
                 }
 
-                // Explosive strikes for melee
+                // Explosive strikes for melee (optimized to reduce lag)
                 if (player.upgrades.includes('explosion') && Math.random() < 0.15) {
                     try { playSfx('explosion'); } catch (e) { }
                     explosionEffects.push({
@@ -3218,21 +3653,33 @@
                         age: 0
                     });
 
-                    // Splash damage to nearby enemies
-                    enemies.forEach(nearbyEnemy => {
-                        if (nearbyEnemy === nearest) return;
+                    // Splash damage to nearby enemies (optimized - only check enemies within range)
+                    const explosionRadius = 60;
+                    let hitCount = 0;
+                    const maxHits = 15; // Limit splash hits to prevent lag
+
+                    for (let i = 0; i < enemies.length && hitCount < maxHits; i++) {
+                        const nearbyEnemy = enemies[i];
+                        if (nearbyEnemy === nearest || nearbyEnemy.dead) continue;
+
+                        // Quick distance check first (cheaper than full calculation)
                         const dx2 = nearbyEnemy.x - nearest.x;
                         const dy2 = nearbyEnemy.y - nearest.y;
+
+                        // Skip if obviously too far
+                        if (Math.abs(dx2) > explosionRadius || Math.abs(dy2) > explosionRadius) continue;
+
                         const dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
 
-                        if (dist2 < 60) {
+                        if (dist2 < explosionRadius) {
                             nearbyEnemy.health -= player.damage * 0.5;
                             nearbyEnemy.hurtTimer = 0.18;
                             if (nearbyEnemy.health <= 0) {
                                 markEnemyDead(nearbyEnemy);
                             }
+                            hitCount++;
                         }
-                    });
+                    }
                 }
             }
         }
@@ -3357,107 +3804,124 @@
 
         // SPECIAL BOSS EVENT SYSTEM
         function triggerBossEvent(minuteRemaining) {
-            const now = performance.now();
+            try {
+                const now = performance.now();
 
-            // Spawn a special boss enemy for each event
-            const minutesSurvived = (300 - gameTimer) / 60;
-            const difficultyRamp = (1 + Math.min(2.5, minutesSurvived * 0.4)) * (player.difficultyMultiplier || 1.0);
+                // Spawn a special boss enemy for each event
+                const minutesSurvived = (300 - gameTimer) / 60;
+                const difficultyRamp = (1 + Math.min(2.5, minutesSurvived * 0.4)) * (player.difficultyMultiplier || 1.0);
 
-            switch (minuteRemaining) {
-                case 4:
-                    // 4 minutes left - Spiral Boss
-                    showToastNotification('⚠️ BOSS EVENT: SPIRAL DEMON! ⚠️', '#ff0000');
-                    try { playSfx('warn'); } catch (e) { }
-                    setTimeout(() => {
-                        spawnEventBoss(4, difficultyRamp);
-                        spawnSpiralFireballs();
-                    }, 2000);
-                    break;
+                switch (minuteRemaining) {
+                    case 4:
+                        // 4 minutes left - First Boss
+                        showToastNotification('⚠️ BOSS EVENT: SHADOW BEAST! ⚠️', '#ff0000');
+                        try { playSfx('warn'); } catch (e) { }
+                        setTimeout(() => {
+                            spawnEventBoss(4, difficultyRamp);
+                            // Simple boss, no special pattern
+                        }, 2000);
+                        break;
 
-                case 3:
-                    // 3 minutes left - Cross Boss
-                    showToastNotification('⚠️ BOSS EVENT: CROSSFIRE DEMON! ⚠️', '#ff0000');
-                    try { playSfx('warn'); } catch (e) { }
-                    setTimeout(() => {
-                        spawnEventBoss(3, difficultyRamp);
-                        spawnCrossFireballs();
-                    }, 2000);
-                    break;
+                    case 3:
+                        // 3 minutes left - Cross Boss
+                        showToastNotification('⚠️ BOSS EVENT: CROSSFIRE DEMON! ⚠️', '#ff0000');
+                        try { playSfx('warn'); } catch (e) { }
+                        setTimeout(() => {
+                            spawnEventBoss(3, difficultyRamp);
+                            spawnCrossFireballs();
+                        }, 2000);
+                        break;
 
-                case 2:
-                    // 2 minutes left - Wave Boss
-                    showToastNotification('⚠️ BOSS EVENT: TSUNAMI DEMON! ⚠️', '#ff0000');
-                    try { playSfx('warn'); } catch (e) { }
-                    setTimeout(() => {
-                        spawnEventBoss(2, difficultyRamp);
-                        spawnWaveFireballs();
-                    }, 2000);
-                    break;
+                    case 2:
+                        // 2 minutes left - Wave Boss
+                        showToastNotification('⚠️ BOSS EVENT: TSUNAMI DEMON! ⚠️', '#ff0000');
+                        try { playSfx('warn'); } catch (e) { }
+                        setTimeout(() => {
+                            spawnEventBoss(2, difficultyRamp);
+                            spawnWaveFireballs();
+                        }, 2000);
+                        break;
 
-                case 1:
-                    // 1 minute left - FINAL BOSS
-                    showToastNotification('🔥 FINAL BOSS: INFERNO OVERLORD! 🔥', '#ff0000');
-                    try { playSfx('warn'); } catch (e) { }
-                    setTimeout(() => {
-                        spawnEventBoss(1, difficultyRamp);
-                        spawnCircleOfDoom();
-                    }, 2000);
-                    break;
+                    case 1:
+                        // 1 minute left - FINAL BOSS (SPIRAL DEMON)
+                        showToastNotification('🔥 FINAL BOSS: SPIRAL DEMON! 🔥', '#ff0000');
+                        try { playSfx('warn'); } catch (e) { }
+                        setTimeout(() => {
+                            spawnEventBoss(1, difficultyRamp);
+                            spawnSpiralFireballs();
+                        }, 2000);
+                        break;
+                }
+            } catch (error) {
+                console.error("Boss event error:", error);
             }
         }
 
         // Spawn special event boss enemy
         function spawnEventBoss(eventNumber, difficultyRamp) {
-            // Spawn near player but not too close
-            const spawnDist = 350;
-            const ang = Math.random() * Math.PI * 2;
-            let x = player.x + Math.cos(ang) * spawnDist;
-            let y = player.y + Math.sin(ang) * spawnDist;
+            if (!player || !enemies) {
+                console.error("Cannot spawn boss: player or enemies undefined");
+                return;
+            }
 
-            // Clamp to world bounds
-            x = clamp(x, 40, WORLD.w - 40);
-            y = clamp(y, 40, WORLD.h - 40);
+            try {
+                // Spawn near player but not too close
+                const spawnDist = 350;
+                const ang = Math.random() * Math.PI * 2;
+                let x = player.x + Math.cos(ang) * spawnDist;
+                let y = player.y + Math.sin(ang) * spawnDist;
 
-            // Boss stats scale with event number (later bosses are stronger)
-            const baseHealth = 150 + (eventNumber * 50); // 200, 250, 300, 350
-            const baseDamage = 12 + (eventNumber * 3); // 15, 18, 21, 24
-            const bossSpeed = 70 + (eventNumber * 10); // 80, 90, 100, 110
+                // Clamp to world bounds
+                x = clamp(x, 40, WORLD.w - 40);
+                y = clamp(y, 40, WORLD.h - 40);
 
-            enemies.push({
-                x,
-                y,
-                id: 'boss' + eventNumber + '_' + (enemyIdSeq++),
-                spriteScale: 1.2, // Larger than normal bosses
-                hurtTimer: 0,
-                dead: false,
-                deadTimer: 0,
-                radius: 45, // Bigger radius
-                health: baseHealth * difficultyRamp,
-                maxHealth: baseHealth * difficultyRamp,
-                damage: baseDamage * difficultyRamp,
-                speed: bossSpeed,
-                isBoss: true,
-                isEventBoss: true, // Mark as special event boss
-                eventNumber: eventNumber,
-                behavior: 'chase',
-                behaviorTimer: 0,
-                circleAngle: Math.random() * Math.PI * 2,
-                zigzagPhase: 0,
-                facingRight: true,
-                floatSpeed: 1.2 + Math.random() * 0.5,
-                floatOffset: Math.random() * Math.PI * 2,
-                wobbleSeed: Math.random() * 9999,
-                dashCooldown: 4000,
-                lastDash: 0,
-                isDashing: false,
-                dashSpeed: 350,
-                dashDuration: 0.6,
-                dashTimer: 0,
-                dashDirX: 0,
-                dashDirY: 0,
-                fireballCooldown: 2000, // Faster fireball attacks
-                lastFireball: 0
-            });
+                // Boss stats scale with event number (later bosses are stronger)
+                const baseHealth = 500 + (eventNumber * 200); // 700, 900, 1100, 1300 (much tankier)
+                const baseDamage = 15 + (eventNumber * 5); // 20, 25, 30, 35 (more dangerous)
+                const bossSpeed = 70 + (eventNumber * 10); // 80, 90, 100, 110
+
+                // Scale health with player level to keep bosses challenging
+                const levelScaling = 1 + (player.level * 0.15); // +15% health per player level
+                const finalHealth = baseHealth * difficultyRamp * levelScaling;
+
+                enemies.push({
+                    x,
+                    y,
+                    id: 'boss' + eventNumber + '_' + (enemyIdSeq++),
+                    spriteScale: 1.2, // Larger than normal bosses
+                    hurtTimer: 0,
+                    dead: false,
+                    deadTimer: 0,
+                    radius: 45, // Bigger radius
+                    health: finalHealth,
+                    maxHealth: finalHealth,
+                    damage: baseDamage * difficultyRamp,
+                    speed: bossSpeed,
+                    isBoss: true,
+                    isEventBoss: true, // Mark as special event boss
+                    eventNumber: eventNumber,
+                    behavior: 'chase',
+                    behaviorTimer: 0,
+                    circleAngle: Math.random() * Math.PI * 2,
+                    zigzagPhase: 0,
+                    facingRight: true,
+                    floatSpeed: 1.2 + Math.random() * 0.5,
+                    floatOffset: Math.random() * Math.PI * 2,
+                    wobbleSeed: Math.random() * 9999,
+                    dashCooldown: 4000,
+                    lastDash: 0,
+                    isDashing: false,
+                    dashSpeed: 350,
+                    dashDuration: 0.6,
+                    dashTimer: 0,
+                    dashDirX: 0,
+                    dashDirY: 0,
+                    fireballCooldown: 2000, // Faster fireball attacks
+                    lastFireball: 0
+                });
+            } catch (error) {
+                console.error("Spawn boss error:", error);
+            }
         }
 
         // Boss Event 1: Spiral Fireballs (4 min remaining)
@@ -3465,6 +3929,11 @@
             let angle = 0;
             const spiralCount = 40;
             const spiralInterval = setInterval(() => {
+                if (gameState.screen !== 'playing') {
+                    clearInterval(spiralInterval);
+                    return;
+                }
+
                 if (gameState.screen !== 'playing' || spiralCount <= 0) {
                     clearInterval(spiralInterval);
                     return;
@@ -3625,14 +4094,33 @@
         }
 
         function gameLoop() {
-            if (gameState.screen !== 'playing') return;
+            if (!gameState || gameState.screen !== 'playing') {
+                requestAnimationFrame(gameLoop);
+                return;
+            }
 
             const now = performance.now();
             if (!gameState.lastFrame) gameState.lastFrame = now;
-            let dt = (now - gameState.lastFrame) / 1000;
+
+            // FPS cap to prevent speedup (target 60 FPS = 16.67ms per frame)
+            const frameDelay = now - gameState.lastFrame;
+            if (frameDelay < 16) {
+                // Too soon, skip this frame
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+
+            let dt = frameDelay / 1000;
             gameState.lastFrame = now;
             dt = Math.min(0.033, Math.max(0.001, dt)); // clamp (30-1000 fps)
             dt *= TIME_SCALE;
+            // Debug: Log if game speed seems wrong
+            if (dt > 0.05) {
+                console.warn('Large dt detected:', dt, 'frames may be skipping');
+            }
+
+            // IMPORTANT: dt affects ALL game entities equally - never modify dt based on player stats!
+            const baseDt = dt; // Store unmodified dt for timer calculations
             const GAME_SPEED = 1.0; // kept for legacy multipliers (now neutral)
 
             // Clear canvas (world is drawn as tiles)
@@ -3780,7 +4268,7 @@
                     }
                 }
 
-                player.x += dx * player.moveSpeed * dt;
+                player.x += dx * player.moveSpeed * dt; // moveSpeed is pixels per second
                 player.y += dy * player.moveSpeed * dt;
 
                 // Keep player in bounds
@@ -3835,13 +4323,32 @@
             }
 
             // HORDE WARNING SYSTEM - spawn large hordes periodically (only after 1 minute)
-            const hordeInterval = 45000; // Every 45 seconds
+            const hordeInterval = 50000; // Every 50 seconds (offset from boss events)
             if (!window.lastHordeTime) window.lastHordeTime = now;
 
             // Only trigger hordes after 1 minute of survival
             const minutesForHorde = (300 - gameTimer) / 60;
+            // Check if we're near a boss event time to avoid overlap
+            const timeRemaining = Math.ceil(gameTimer);
+            const nearBossEvent = (timeRemaining > 235 && timeRemaining < 245) || // 4 min boss
+                (timeRemaining > 175 && timeRemaining < 185) || // 3 min boss
+                (timeRemaining > 115 && timeRemaining < 125) || // 2 min boss
+                (timeRemaining > 55 && timeRemaining < 65);     // 1 min boss
+
             if (minutesForHorde >= 1.0 && now - window.lastHordeTime >= hordeInterval) {
+                // Skip this horde if boss event is imminent
+                if (nearBossEvent) {
+                    window.lastHordeTime = now; // Reset timer to try again later
+                    return; // Skip this horde
+                }
                 window.lastHordeTime = now;
+                // Ensure minimum delay between event toasts
+                if (window.lastEventToast && now - window.lastEventToast < 5000) {
+                    return; // Wait at least 5 seconds between event notifications
+                }
+                window.lastEventToast = now;
+
+
 
                 // Show warning toast
                 showToastNotification('⚠️ LARGE HORDE INCOMING! ⚠️', '#ff3333');
@@ -4796,6 +5303,8 @@
             // Update HUD
             updateHUD();
 
+            updateStatsPanel();
+
             // Continue loop
             ctx.setTransform(1, 0, 0, 1, 0, 0);
             requestAnimationFrame(gameLoop);
@@ -4803,7 +5312,9 @@
 
         function gameOver() {
             gameState.screen = 'gameover';
+            gameState.loopRunning = false;
             document.getElementById('hud').style.display = 'none';
+            document.getElementById('statsPanel').style.display = 'none';
             document.getElementById('gameOverScreen').style.display = 'flex';
 
             // Hide mobile controls
@@ -4828,7 +5339,9 @@
 
         function victory() {
             gameState.screen = 'victory';
+            gameState.loopRunning = false;
             document.getElementById('hud').style.display = 'none';
+            document.getElementById('statsPanel').style.display = 'none';
             document.getElementById('victoryScreen').style.display = 'flex';
 
             // Hide mobile controls
@@ -5163,12 +5676,64 @@
                 }
             }
 
+
+            window.startBossMusic = function () {
+                const c = ensureCtx();
+                if (!c || bossTimer || !window.audioSettings.musicEnabled) return;
+
+                // Stop normal music first
+                window.stopMusic();
+
+                // Boss music - more intense, faster rhythm
+                const bossSeq = [
+                    164.81, 220.00, 277.18, 220.00, // E A C# A
+                    155.56, 207.65, 261.63, 207.65, // D# G# C G#
+                    146.83, 196.00, 246.94, 196.00, // D G B♭ G
+                    138.59, 185.00, 233.08, 185.00  // C# F# Bb F#
+                ];
+                let i = 0;
+
+                bossOsc = c.createOscillator();
+                const g = c.createGain();
+                bossOsc.type = 'sawtooth'; // More aggressive sound
+                g.gain.value = 0.0001;
+                bossOsc.connect(g);
+                g.connect(musicGain);
+                bossOsc.start();
+
+                g.gain.setTargetAtTime(0.20, c.currentTime, 0.06);
+
+                bossTimer = setInterval(() => {
+                    if (!window.audioSettings.musicEnabled) return;
+                    const f = bossSeq[i++ % bossSeq.length];
+                    bossOsc.frequency.setTargetAtTime(f, c.currentTime, 0.01);
+                }, 120); // Faster tempo
+            };
+
+            window.stopBossMusic = function () {
+                if (bossTimer) { clearInterval(bossTimer); bossTimer = null; }
+                if (bossOsc) {
+                    try { bossOsc.stop(); } catch (e) { }
+                    try { bossOsc.disconnect(); } catch (e) { }
+                    bossOsc = null;
+                }
+            };
+
             window.toggleMusic = function () {
                 window.audioSettings.musicEnabled = !window.audioSettings.musicEnabled;
                 localStorage.setItem(LS_MUSIC, window.audioSettings.musicEnabled ? '1' : '0');
                 ensureCtx();
                 if (musicGain) musicGain.gain.value = window.audioSettings.musicEnabled ? 0.20 : 0.0;
-                if (window.audioSettings.musicEnabled) startMusic(); else stopMusic();
+                if (window.audioSettings.musicEnabled) {
+                    if (gameState.bossRoundActive) {
+                        startBossMusic();
+                    } else {
+                        startMusic();
+                    }
+                } else {
+                    stopMusic();
+                    stopBossMusic();
+                }
                 updateAudioButtons();
                 try { playSfx('click'); } catch (e) { }
             };
@@ -5265,7 +5830,176 @@
                 transform: translateX(-50%) scale(1.1);
             }
         }
+
+        /* Upgrade Activation Animations */
+        @keyframes upgradeActivate {
+            0% {
+                transform: scale(0.5);
+                opacity: 0;
+            }
+
+            50% {
+                transform: scale(1.3);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 0;
+            }
+        }
+
+        .upgrade-flash {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            animation: upgradeActivate 1s ease-out forwards;
+        }
+
+        @keyframes permanentGlow {
+
+            0%,
+            100% {
+                opacity: 0.6;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 1;
+                transform: scale(1.1);
+            }
+        }
+
+
+        /* Landscape Mode Enforcement for Mobile */
+        @media (max-width: 768px) {
+            body {
+                zoom: 0.5;
+                /* 50% zoom for mobile */
+                -moz-transform: scale(0.5);
+                -moz-transform-origin: 0 0;
+            }
+        }
+
+        /* Portrait Mode Warning Overlay */
+        #landscapeWarning {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 99999;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        #landscapeWarning .rotate-icon {
+            font-size: 5rem;
+            margin-bottom: 2rem;
+            animation: rotateDevice 2s ease-in-out infinite;
+        }
+
+        #landscapeWarning h2 {
+            font-family: 'Cinzel', serif;
+            font-size: 2rem;
+            color: var(--gold);
+            margin-bottom: 1rem;
+            text-shadow: 0 0 20px rgba(212, 175, 55, 0.6);
+        }
+
+        #landscapeWarning p {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.2rem;
+            color: #aaa;
+            max-width: 400px;
+        }
+
+        @keyframes rotateDevice {
+
+            0%,
+            100% {
+                transform: rotate(0deg);
+            }
+
+            25% {
+                transform: rotate(-90deg);
+            }
+
+            50% {
+                transform: rotate(-90deg);
+            }
+
+            75% {
+                transform: rotate(-90deg);
+            }
+        }
+
+        /* Desktop - no zoom */
+        @media (min-width: 769px) {
+            body {
+                zoom: 1;
+            }
+        }
     </style>
+
+
+    <script>
+        /* ===== Landscape Mode Enforcement for Mobile ===== */
+        (function () {
+            function checkOrientation() {
+                const warning = document.getElementById('landscapeWarning');
+                if (!warning) return;
+
+                // Only enforce on mobile devices (width <= 768px)
+                const isMobile = window.innerWidth <= 768 ||
+                    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+                if (isMobile) {
+                    // Check if in portrait mode
+                    const isPortrait = window.innerHeight > window.innerWidth;
+
+                    if (isPortrait) {
+                        // Show warning
+                        warning.style.display = 'flex';
+
+                        // Pause game if it's running
+                        if (window.gameState && window.gameState.screen === 'playing') {
+                            // Don't actually pause, just show overlay
+                        }
+                    } else {
+                        // Hide warning - device is in landscape
+                        warning.style.display = 'none';
+                    }
+                } else {
+                    // Desktop - always hide warning
+                    warning.style.display = 'none';
+                }
+            }
+
+            // Check on load
+            window.addEventListener('load', checkOrientation);
+
+            // Check on resize
+            window.addEventListener('resize', checkOrientation);
+
+            // Check on orientation change
+            window.addEventListener('orientationchange', () => {
+                setTimeout(checkOrientation, 100);
+            });
+
+            // Initial check
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', checkOrientation);
+            } else {
+                checkOrientation();
+            }
+        })();
+    </script>
 
 </body>
 
