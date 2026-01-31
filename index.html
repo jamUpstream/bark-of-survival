@@ -1535,6 +1535,7 @@
         <div class="menu-buttons">
             <button class="menu-btn" onclick="showCharacterSelect()">Start Game</button>
             <button class="menu-btn" onclick="showShop()">Shop</button>
+            <button class="menu-btn" onclick="showAchievementsScreen()">Achievements</button>
             <button class="menu-btn" onclick="showOptions()">Options</button>
         </div>
     </div>
@@ -1735,6 +1736,14 @@
                     onclick="buyPermanentUpgrade('xp', 400)">Purchase</button>
             </div>
         </div>
+    </div>
+
+    <!-- Achievements Screen -->
+    <div id="achievementsScreen"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10,10,10,0.97); z-index: 1001; padding: 2rem; overflow-y: auto;">
+        <button class="back-btn" onclick="hideAchievementsScreen()">← Back</button>
+        <h2 class="shop-title" style="color: var(--gold); text-align: center; margin-bottom: 2rem;">ACHIEVEMENTS</h2>
+        <div class="achievements-grid" id="achievementsGrid"></div>
     </div>
 
     <!-- Options Screen -->
@@ -2984,10 +2993,12 @@
             if (isFinal) {
                 finalBossActive = true;
                 bossLockdownUntil = Number.POSITIVE_INFINITY;
+                purgeNonBossEnemies(); // For final boss, immediately clear
             } else {
-                bossLockdownUntil = Math.max(bossLockdownUntil || 0, now + ms);
+                // For regular bosses, set 20 second lockdown (20000ms)
+                bossLockdownUntil = Math.max(bossLockdownUntil || 0, now + 20000);
+                purgeNonBossEnemies(); // Clear existing enemies when boss spawns
             }
-            purgeNonBossEnemies();
         }
 
         function stopBossPatterns() {
@@ -3007,6 +3018,8 @@
                 const aliveFinal = enemies.some(e => e && e.isBoss && e.isFinalBoss && !e.dead);
                 if (!aliveFinal) {
                     finalBossActive = false;
+                    // Trigger victory when final boss is defeated
+                    victory();
                     bossLockdownUntil = 0;
                     stopBossPatterns();
                 }
@@ -3082,6 +3095,7 @@
 
         // Game timer
         let gameTimer = 300; // 5 minutes in seconds
+        let finalBossTimer = 0; // Counts UP during final boss fight
         let lastTimerUpdate = 0;
         let _lastHitSfx = 0; // throttle hit sfx
         let _lastDeathSfx = 0;
@@ -3184,9 +3198,9 @@
                 const toast = document.createElement('div');
                 toast.style.cssText = `
                 position: fixed;
-                top: 50%;
+                top: 20px;
                 left: 50%;
-                transform: translate(-50%, -50%);
+                transform: translateX(-50%);
                 background: rgba(0, 0, 0, 0.95);
                 border: 3px solid ${color};
                 padding: 2rem 3rem;
@@ -3234,10 +3248,22 @@
             document.getElementById('optionsUpgrades').textContent = totalUpgrades;
         }
 
+        function showAchievementsScreen() {
+            document.getElementById('mainMenu').style.display = 'none';
+            document.getElementById('achievementsScreen').style.display = 'block';
+            renderAchievements();
+        }
+
+        function hideAchievementsScreen() {
+            document.getElementById('achievementsScreen').style.display = 'none';
+            document.getElementById('mainMenu').style.display = 'flex';
+        }
+
         function backToMenu() {
             document.getElementById('mainMenu').style.display = 'flex';
             document.getElementById('characterSelect').style.display = 'none';
             document.getElementById('shop').style.display = 'none';
+            document.getElementById('achievementsScreen').style.display = 'none';
             document.getElementById('options').style.display = 'none';
             document.getElementById('gameOverScreen').style.display = 'none';
             document.getElementById('victoryScreen').style.display = 'none';
@@ -3392,6 +3418,144 @@
             }
         }
 
+
+        // ==== ACHIEVEMENTS SYSTEM ====
+        const ACHIEVEMENTS = [
+            {
+                id: 'first_blood', name: 'First Blood', description: 'Kill your first enemy', icon: '⚔️',
+                requirement: { type: 'kills', value: 1 }, reward: 50, unlocked: false, claimed: false, progress: 0
+            },
+            {
+                id: 'slayer', name: 'Slayer', description: 'Kill 100 enemies', icon: '💀',
+                requirement: { type: 'kills', value: 100 }, reward: 300, unlocked: false, claimed: false, progress: 0
+            },
+            {
+                id: 'mass_murderer', name: 'Mass Murderer', description: 'Kill 500 enemies', icon: '☠️',
+                requirement: { type: 'kills', value: 500 }, reward: 1000, unlocked: false, claimed: false, progress: 0
+            },
+            {
+                id: 'survivor', name: 'Survivor', description: 'Survive for 5 minutes', icon: '⏱️',
+                requirement: { type: 'time', value: 300 }, reward: 200, unlocked: false, claimed: false, progress: 0
+            },
+            {
+                id: 'ultimate_survivor', name: 'Ultimate Survivor', description: 'Survive the full 10 minutes', icon: '🏆',
+                requirement: { type: 'time', value: 600 }, reward: 500, unlocked: false, claimed: false, progress: 0
+            },
+            {
+                id: 'novice', name: 'Novice', description: 'Reach level 5', icon: '📈',
+                requirement: { type: 'level', value: 5 }, reward: 150, unlocked: false, claimed: false, progress: 0
+            },
+            {
+                id: 'veteran', name: 'Veteran', description: 'Reach level 10', icon: '⭐',
+                requirement: { type: 'level', value: 10 }, reward: 400, unlocked: false, claimed: false, progress: 0
+            },
+            {
+                id: 'bone_collector', name: 'Bone Collector', description: 'Collect 1000 bones in total', icon: '🦴',
+                requirement: { type: 'total_bones', value: 1000 }, reward: 250, unlocked: false, claimed: false, progress: 0
+            },
+            {
+                id: 'boss_slayer', name: 'Boss Slayer', description: 'Defeat a boss', icon: '👹',
+                requirement: { type: 'boss_kills', value: 1 }, reward: 350, unlocked: false, claimed: false, progress: 0
+            }
+        ];
+        let achievements = [];
+        function loadAchievements() {
+            const saved = localStorage.getItem('bark_achievements');
+            if (saved) {
+                try {
+                    const savedData = JSON.parse(saved);
+                    ACHIEVEMENTS.forEach(ach => {
+                        const savedAch = savedData.find(a => a.id === ach.id);
+                        if (savedAch) {
+                            ach.unlocked = savedAch.unlocked || false;
+                            ach.claimed = savedAch.claimed || false;
+                            ach.progress = savedAch.progress || 0;
+                        }
+                    });
+                } catch (e) { console.error('Error loading achievements:', e); }
+            }
+            achievements = ACHIEVEMENTS;
+            console.log('Achievements loaded:', achievements.length, 'achievements');
+        }
+        function saveAchievements() {
+            try { localStorage.setItem('bark_achievements', JSON.stringify(achievements)); } catch (e) { }
+        }
+        function checkAchievements() {
+            if (!achievements || achievements.length === 0) return;
+            const survivedTime = Math.floor(300 - gameTimer);
+            const stats = {
+                kills: window.totalKills || 0,
+                time: survivedTime > 0 ? survivedTime : 0,
+                level: player.level || 1,
+                total_bones: parseInt(localStorage.getItem('bark_total_bones_earned')) || 0,
+                boss_kills: parseInt(localStorage.getItem('bark_boss_kills')) || 0
+            };
+            console.log('Checking achievements with stats:', stats);
+            achievements.forEach(achievement => {
+                if (!achievement.unlocked) {
+                    const reqType = achievement.requirement.type;
+                    const currentValue = stats[reqType] || 0;
+                    achievement.progress = currentValue;
+                    if (currentValue >= achievement.requirement.value) {
+                        achievement.unlocked = true;
+                        saveAchievements();
+                        showAchievementToast(achievement);
+                        console.log('Achievement unlocked:', achievement.name);
+                    }
+                }
+            });
+        }
+        function showAchievementToast(achievement) {
+            const toast = document.createElement('div');
+            toast.className = 'achievement-toast';
+            toast.innerHTML = `<div class="toast-title">ACHIEVEMENT UNLOCKED</div><div class="toast-name">${achievement.icon} ${achievement.name}</div><div class="toast-reward">+${achievement.reward} Bones</div>`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+        function claimAchievementReward(achievementId) {
+            const achievement = achievements.find(a => a.id === achievementId);
+            if (achievement && achievement.unlocked && !achievement.claimed) {
+                achievement.claimed = true;
+                gameState.currency = (gameState.currency || 0) + achievement.reward;
+                localStorage.setItem('barkCurrency', gameState.currency);
+                saveAchievements();
+
+                // Update currency displays if they exist
+                const currencyEl = document.getElementById('currency');
+                if (currencyEl) currencyEl.textContent = gameState.currency;
+
+                const shopCurrencyEl = document.getElementById('shopCurrency');
+                if (shopCurrencyEl) shopCurrencyEl.textContent = gameState.currency;
+
+                renderAchievements();
+                showToastNotification(`Claimed ${achievement.reward} Bones!`, '#d4af37');
+            }
+        }
+        function renderAchievements() {
+            const grid = document.getElementById('achievementsGrid');
+            console.log('renderAchievements called, grid exists:', !!grid, 'achievements:', achievements.length);
+            if (!grid) return;
+            grid.innerHTML = '';
+            achievements.forEach(ach => {
+                const progressPercent = Math.min(100, (ach.progress / ach.requirement.value) * 100);
+                const card = document.createElement('div');
+                card.className = `achievement-card ${ach.unlocked ? 'unlocked' : 'locked'}`;
+                card.innerHTML = `<div class="achievement-header"><div class="achievement-info"><div class="achievement-name">${ach.name}</div><div class="achievement-desc">${ach.description}</div></div><div class="achievement-status ${ach.unlocked ? 'unlocked' : 'locked'}">${ach.icon}</div></div><div class="achievement-progress"><div class="progress-bar-container"><div class="progress-bar-fill" style="width: ${progressPercent}%"></div></div><div class="progress-text">${ach.progress} / ${ach.requirement.value}</div></div><div class="achievement-reward"><div class="reward-label">REWARD</div><div class="reward-value">💀 ${ach.reward} Bones</div></div>${ach.unlocked ? `<button class="claim-btn ${ach.claimed ? 'claimed' : ''}" onclick="claimAchievementReward('${ach.id}')" ${ach.claimed ? 'disabled' : ''}>${ach.claimed ? 'CLAIMED' : 'CLAIM REWARD'}</button>` : ''}`;
+                grid.appendChild(card);
+            });
+            console.log('Rendered', achievements.length, 'achievement cards');
+        }
+        function trackBossKill() {
+            const bossKills = parseInt(localStorage.getItem('bark_boss_kills')) || 0;
+            localStorage.setItem('bark_boss_kills', bossKills + 1);
+            checkAchievements();
+        }
+        function trackBonesEarned(amount) {
+            const totalEarned = parseInt(localStorage.getItem('bark_total_bones_earned')) || 0;
+            localStorage.setItem('bark_total_bones_earned', totalEarned + amount);
+            checkAchievements();
+        }
+
         function selectCharacter(index) {
             if (!gameState.unlockedCharacters[index]) {
                 alert('This character is locked! Visit the shop to unlock.');
@@ -3491,6 +3655,7 @@
 
             // Reset timer
             gameTimer = 300;
+            finalBossTimer = 0;
             lastTimerUpdate = performance.now();
             lastEnemySpawn = performance.now();
 
@@ -3538,10 +3703,16 @@
             document.getElementById('healthFill').style.width = healthPercent + '%';
             document.getElementById('healthText').textContent = Math.max(0, Math.ceil(player.health)) + '/' + player.maxHealth;
 
-            // Timer
-            const minutes = Math.floor(gameTimer / 60);
-            const seconds = Math.floor(gameTimer % 60);
-            document.getElementById('timerValue').textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+            // Timer - show countdown normally, count up during final boss
+            if (finalBossActive) {
+                const fbMinutes = Math.floor(finalBossTimer / 60);
+                const fbSeconds = Math.floor(finalBossTimer % 60);
+                document.getElementById('timerValue').textContent = '+' + fbMinutes + ':' + (fbSeconds < 10 ? '0' : '') + fbSeconds;
+            } else {
+                const minutes = Math.floor(gameTimer / 60);
+                const seconds = Math.floor(gameTimer % 60);
+                document.getElementById('timerValue').textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+            }
 
             // Level
             document.getElementById('levelValue').textContent = player.level;
@@ -3552,6 +3723,14 @@
             // XP
             const xpPercent = (player.xp / player.xpToNext) * 100;
             document.getElementById('xpFill').style.width = xpPercent + '%';
+
+            // Check achievements periodically (every 60 frames = ~1 second)
+            if (!window.achievementCheckCounter) window.achievementCheckCounter = 0;
+            window.achievementCheckCounter++;
+            if (window.achievementCheckCounter >= 60) {
+                window.achievementCheckCounter = 0;
+                checkAchievements();
+            }
         }
 
         function spawnEnemy() {
@@ -4344,6 +4523,10 @@
         function handleEnemyDeath(enemy) {
             player.kills++;
 
+            // Track total kills for achievements
+            if (!window.totalKills) window.totalKills = 0;
+            window.totalKills++;
+
             // Life steal
             if (player.upgrades.includes('lifesteal')) {
                 player.health = Math.min(player.maxHealth, player.health + 2);
@@ -4416,7 +4599,7 @@
                         break;
 
                     case 1:
-                        // 1 minute left - FINAL BOSS (5 demon warlords, no normal spawns until timer ends)
+                        // 1.5 minutes left - FINAL BOSS (5 demon warlords, no normal spawns until defeated)
                         startBossLockdown(99999999, true);
                         showToastNotification('🔥 FINAL BOSS: DEMON WARLORDS! 🔥', '#ff0000');
                         try { playSfx('warn'); } catch (e) { }
@@ -4510,9 +4693,9 @@
                         dashTimer: 0,
                         dashDirX: 0,
                         dashDirY: 0,
-                        fireballCooldown: isFinal ? 1100 : 2000, // Final boss: faster but capped volley
+                        fireballCooldown: 2000, // Final boss: same as normal boss
                         lastFireball: 0,
-                        multiStrikeShots: isFinal ? 3 : 1,
+                        multiStrikeShots: 1, // Single shot like normal boss
                         isFinalBoss: isFinal
                     });
                     if (isFinal) finalBossIds.add(enemies[enemies.length - 1].id);
@@ -4577,113 +4760,141 @@
 
         // Boss Event 2: Cross Fireballs (3 min remaining)
         function spawnCrossFireballs() {
-            let waveCount = 0;
-            const maxWaves = 5;
-            const crossInterval = setInterval(() => {
-                if (gameState.screen !== 'playing' || waveCount >= maxWaves) {
-                    clearInterval(crossInterval);
-                    return;
-                }
+            try {
+                let waveCount = 0;
+                const maxWaves = 5;
+                console.log('Starting cross fireballs pattern');
 
-                // Horizontal line
-                for (let i = -3; i <= 3; i++) {
-                    bossFireballs.push({
-                        x: player.x + i * 80,
-                        y: player.y - 400,
-                        vx: 0,
-                        vy: 180,
-                        radius: 15,
-                        damage: 15,
-                        lifetime: 5
-                    });
-                }
+                const crossInterval = setInterval(() => {
+                    try {
+                        if (gameState.screen !== 'playing' || waveCount >= maxWaves) {
+                            clearInterval(crossInterval);
+                            console.log('Cross fireballs pattern ended');
+                            return;
+                        }
 
-                // Vertical line
-                for (let i = -3; i <= 3; i++) {
-                    bossFireballs.push({
-                        x: player.x - 400,
-                        y: player.y + i * 80,
-                        vx: 180,
-                        vy: 0,
-                        radius: 15,
-                        damage: 15,
-                        lifetime: 5
-                    });
-                }
+                        // Horizontal line
+                        for (let i = -3; i <= 3; i++) {
+                            bossFireballs.push({
+                                x: player.x + i * 80,
+                                y: player.y - 400,
+                                vx: 0,
+                                vy: 180,
+                                radius: 15,
+                                damage: 15,
+                                lifetime: 5
+                            });
+                        }
 
-                waveCount++;
-            }, 800);
+                        // Vertical line
+                        for (let i = -3; i <= 3; i++) {
+                            bossFireballs.push({
+                                x: player.x - 400,
+                                y: player.y + i * 80,
+                                vx: 180,
+                                vy: 0,
+                                radius: 15,
+                                damage: 15,
+                                lifetime: 5
+                            });
+                        }
+
+                        waveCount++;
+                    } catch (innerError) {
+                        console.error('Error in cross fireball interval:', innerError);
+                        clearInterval(crossInterval);
+                    }
+                }, 800);
+            } catch (error) {
+                console.error('Error starting cross fireballs:', error);
+            }
         }
 
         // Boss Event 3: Wave Fireballs (2 min remaining)
 
         function spawnWaveFireballs() {
-            // TSUNAMI DEMON pattern: 4 directional waves. Guard against stacked intervals.
-            if (window._waveFireballInterval) {
-                clearInterval(window._waveFireballInterval);
-                window._waveFireballInterval = null;
-            }
-
-            if (gameState.screen !== 'playing' || !player) return;
-
-            let waveCount = 0;
-            const maxWaves = 8;
-            const MAX_BOSS_FIREBALLS = 200;
-
-            window._waveFireballInterval = setInterval(() => {
-                if (gameState.screen !== 'playing' || !player || waveCount >= maxWaves) {
+            try {
+                // TSUNAMI DEMON pattern: 4 directional waves. Guard against stacked intervals.
+                if (window._waveFireballInterval) {
                     clearInterval(window._waveFireballInterval);
                     window._waveFireballInterval = null;
+                }
+
+                if (gameState.screen !== 'playing' || !player) {
+                    console.log('Wave fireballs cancelled - game not playing or no player');
                     return;
                 }
 
-                // Cap list size to avoid frame drops if multiple patterns overlap
-                if (bossFireballs.length > MAX_BOSS_FIREBALLS) {
-                    bossFireballs.splice(0, bossFireballs.length - MAX_BOSS_FIREBALLS);
-                }
+                let waveCount = 0;
+                const maxWaves = 8;
+                const MAX_BOSS_FIREBALLS = 200;
 
-                const side = waveCount % 4; // 0=top, 1=right, 2=bottom, 3=left
+                console.log('Starting wave fireballs pattern');
 
-                for (let i = 0; i < 8; i++) {
-                    let x, y, vx, vy;
+                window._waveFireballInterval = setInterval(() => {
+                    try {
+                        if (gameState.screen !== 'playing' || !player || waveCount >= maxWaves) {
+                            clearInterval(window._waveFireballInterval);
+                            window._waveFireballInterval = null;
+                            console.log('Wave fireballs pattern ended');
+                            return;
+                        }
 
-                    if (side === 0) { // Top
-                        x = player.x - 300 + i * 75;
-                        y = player.y - 400;
-                        vx = 0;
-                        vy = 160;
-                    } else if (side === 1) { // Right
-                        x = player.x + 400;
-                        y = player.y - 300 + i * 75;
-                        vx = -160;
-                        vy = 0;
-                    } else if (side === 2) { // Bottom
-                        x = player.x - 300 + i * 75;
-                        y = player.y + 400;
-                        vx = 0;
-                        vy = -160;
-                    } else { // Left
-                        x = player.x - 400;
-                        y = player.y - 300 + i * 75;
-                        vx = 160;
-                        vy = 0;
+                        // Cap list size to avoid frame drops if multiple patterns overlap
+                        if (bossFireballs.length > MAX_BOSS_FIREBALLS) {
+                            bossFireballs.splice(0, bossFireballs.length - MAX_BOSS_FIREBALLS);
+                        }
+
+                        const side = waveCount % 4; // 0=top, 1=right, 2=bottom, 3=left
+
+                        for (let i = 0; i < 8; i++) {
+                            let x, y, vx, vy;
+
+                            if (side === 0) { // Top
+                                x = player.x - 300 + i * 75;
+                                y = player.y - 400;
+                                vx = 0;
+                                vy = 160;
+                            } else if (side === 1) { // Right
+                                x = player.x + 400;
+                                y = player.y - 300 + i * 75;
+                                vx = -160;
+                                vy = 0;
+                            } else if (side === 2) { // Bottom
+                                x = player.x - 300 + i * 75;
+                                y = player.y + 400;
+                                vx = 0;
+                                vy = -160;
+                            } else { // Left
+                                x = player.x - 400;
+                                y = player.y - 300 + i * 75;
+                                vx = 160;
+                                vy = 0;
+                            }
+
+                            if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+
+                            bossFireballs.push({
+                                x: x,
+                                y: y,
+                                vx: vx,
+                                vy: vy,
+                                radius: 15,
+                                damage: 15,
+                                lifetime: 5
+                            });
+                        }
+
+                        waveCount++;
+                    } catch (innerError) {
+                        console.error('Error in wave fireball interval:', innerError);
+                        clearInterval(window._waveFireballInterval);
+                        window._waveFireballInterval = null;
                     }
-
-                    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-
-                    bossFireballs.push({
-                        x: x,
-                        y: y,
-                        vx: vx,
-                        vy: vy,
-                        radius: 15,
-                        damage: 15,
-                        lifetime: 5
-                    });
-                }
-
-                waveCount++;
-            }, 600);
+                }, 600);
+            } catch (error) {
+                console.error('Error starting wave fireballs:', error);
+            }
         }
 
         // Boss Event 4: Circle of Doom (1 min remaining) - Player trapped in middle
@@ -4805,13 +5016,16 @@
 
             // Update timer
             if (now - lastTimerUpdate > 1000) {
-                gameTimer--;
-                lastTimerUpdate = now;
-
-                if (gameTimer <= 0) {
-                    victory();
-                    return;
+                if (finalBossActive) {
+                    finalBossTimer++; // Count UP during final boss
+                } else {
+                    gameTimer--;
+                    if (gameTimer <= 0) {
+                        victory();
+                        return;
+                    }
                 }
+                lastTimerUpdate = now;
 
                 // SPECIAL BOSS EVENT SYSTEM - triggers at specific time marks
                 // Timer counts DOWN from 300 (5:00) to 0
@@ -4834,9 +5048,9 @@
                     window.triggeredBossEvents.add(2);
                     triggerBossEvent(2); // 2 minutes remaining
                 }
-                if (timeRemaining <= 60 && timeRemaining > 55 && !window.triggeredBossEvents.has(1)) {
+                if (timeRemaining <= 90 && timeRemaining > 85 && !window.triggeredBossEvents.has(1)) {
                     window.triggeredBossEvents.add(1);
-                    triggerBossEvent(1); // 1 minute remaining - FINAL BOSS EVENT
+                    triggerBossEvent(1); // 1.5 minutes remaining - FINAL BOSS EVENT
                 }
             }
 
@@ -4854,8 +5068,7 @@
             // Check ultimate cooldown (30 seconds)
             if (now - player.lastUltimate > 30000 && !player.ultimateReady) {
                 player.ultimateReady = true;
-                // Show ultimate ready toast
-                showToastNotification('⚡ ULTIMATE READY! ⚡', '#ffaa00');
+                // Ultimate indicator at bottom will show it's ready (no toast)
             }
 
             // Update ultimate indicator
@@ -4962,7 +5175,12 @@
             const spawnInterval = enemySpawnRate * 1000 * spawnRateMultiplier;
 
             if (now - lastEnemySpawn > spawnInterval) {
-                spawnEnemy();
+                // Only spawn if not in boss lockdown
+                if (!inBossLockdown()) {
+                    spawnEnemy();
+                } else {
+                    console.log('Boss lockdown active - enemy spawn blocked');
+                }
                 lastEnemySpawn = now;
             }
 
@@ -4977,7 +5195,7 @@
             const nearBossEvent = (timeRemaining > 235 && timeRemaining < 245) || // 4 min boss
                 (timeRemaining > 175 && timeRemaining < 185) || // 3 min boss
                 (timeRemaining > 115 && timeRemaining < 125) || // 2 min boss
-                (timeRemaining > 55 && timeRemaining < 65);     // 1 min boss
+                (timeRemaining > 85 && timeRemaining < 95);     // 1.5 min boss
 
             if (minutesForHorde >= 1.0 && now - window.lastHordeTime >= hordeInterval) {
                 // Skip this horde if boss event is imminent
@@ -7000,6 +7218,223 @@
                 zoom: 1;
             }
         }
+
+        /* Achievements Screen */
+        #achievementsScreen {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 10, 10, 0.97);
+            z-index: 1001;
+            overflow-y: auto;
+            padding: 2rem;
+        }
+
+        .achievements-title {
+            font-family: 'Cinzel', serif;
+            font-size: 3rem;
+            color: var(--gold);
+            text-align: center;
+            margin-bottom: 2rem;
+            text-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
+        }
+
+        .achievements-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding-bottom: 2rem;
+        }
+
+        .achievement-card {
+            background: linear-gradient(135deg, var(--stone-gray) 0%, #1a1a1a 100%);
+            border: 2px solid var(--wood-brown);
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .achievement-card.unlocked {
+            border-color: var(--gold);
+            box-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+        }
+
+        .achievement-card.locked {
+            opacity: 0.6;
+        }
+
+        .achievement-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+
+        .achievement-info {
+            flex: 1;
+        }
+
+        .achievement-name {
+            font-family: 'Bebas Neue', cursive;
+            font-size: 1.5rem;
+            color: var(--gold);
+            margin-bottom: 0.3rem;
+        }
+
+        .achievement-desc {
+            color: #aaa;
+            font-size: 0.95rem;
+            line-height: 1.4;
+        }
+
+        .achievement-status {
+            font-size: 2rem;
+            margin-left: 1rem;
+        }
+
+        .achievement-status.locked {
+            opacity: 0.3;
+        }
+
+        .achievement-progress {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(212, 175, 55, 0.2);
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 10px;
+            background: rgba(61, 40, 23, 0.5);
+            border: 1px solid var(--wood-brown);
+            margin-bottom: 0.5rem;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--wood-brown) 0%, var(--gold) 100%);
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            font-family: 'Bebas Neue', cursive;
+            font-size: 0.9rem;
+            color: #aaa;
+        }
+
+        .achievement-reward {
+            margin-top: 1rem;
+            padding: 0.8rem;
+            background: rgba(212, 175, 55, 0.1);
+            border: 1px solid var(--gold);
+            text-align: center;
+        }
+
+        .reward-label {
+            font-family: 'Bebas Neue', cursive;
+            font-size: 0.8rem;
+            color: var(--gold);
+            margin-bottom: 0.3rem;
+        }
+
+        .reward-value {
+            font-family: 'Bebas Neue', cursive;
+            font-size: 1.3rem;
+            color: #ffaa00;
+        }
+
+        .claim-btn {
+            margin-top: 1rem;
+            width: 100%;
+            padding: 0.8rem;
+            font-family: 'Bebas Neue', cursive;
+            font-size: 1.3rem;
+            background: linear-gradient(135deg, var(--wood-brown) 0%, #2d1e0f 100%);
+            border: 2px solid var(--gold);
+            color: var(--gold);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .claim-btn:hover:not(:disabled) {
+            background: linear-gradient(135deg, var(--gold) 0%, #b8941f 100%);
+            color: var(--dark-bg);
+            transform: translateY(-2px);
+        }
+
+        .claim-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .claim-btn.claimed {
+            background: var(--stone-gray);
+            border-color: #555;
+            color: #777;
+        }
+
+        .achievement-toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, rgba(139, 0, 0, 0.95) 0%, rgba(10, 10, 10, 0.95) 100%);
+            border: 3px solid var(--gold);
+            padding: 1.5rem 2.5rem;
+            z-index: 9999;
+            animation: toastFadeTop 3s ease-out forwards;
+            pointer-events: none;
+            box-shadow: 0 0 40px rgba(212, 175, 55, 0.4);
+            text-align: center;
+            max-width: 500px;
+        }
+
+        .achievement-toast .toast-title {
+            font-family: 'Bebas Neue', cursive;
+            font-size: 1.2rem;
+            color: #aaa;
+            margin-bottom: 0.5rem;
+            letter-spacing: 0.3rem;
+        }
+
+        .achievement-toast .toast-name {
+            font-family: 'Bebas Neue', cursive;
+            font-size: 2rem;
+            color: var(--gold);
+            margin-bottom: 0.3rem;
+        }
+
+        .achievement-toast .toast-reward {
+            font-family: 'Bebas Neue', cursive;
+            font-size: 1.5rem;
+            color: #ffaa00;
+        }
+
+        @keyframes toastFadeTop {
+            0% {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-20px);
+            }
+
+            10% {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+
+            80% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-10px);
+            }
+        }
     </style>
 
 
@@ -7057,6 +7492,9 @@
 
         // Initialize menu navigation on page load
         function initializeMenuNavigation() {
+            // Load achievements on page load
+            loadAchievements();
+
             // Highlight first menu button on load
             window.mainMenuIndex = 0;
             const menuButtons = document.querySelectorAll('#mainMenu .menu-btn');
