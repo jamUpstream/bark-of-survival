@@ -591,6 +591,12 @@
             transition: all 0.3s ease;
         }
 
+        .upgrade-card.selected {
+            border-color: #fff;
+            box-shadow: 0 0 30px rgba(212, 175, 55, 0.8);
+            transform: translateY(-5px) scale(1.02);
+        }
+
         .upgrade-card:hover {
             border-color: var(--gold);
             transform: translateY(-5px);
@@ -1897,6 +1903,14 @@
     </div>
 
     <script>
+        // All Effect Arrays (must be at top for global scope)
+        const bossFireballs = [];
+        const ultimateEffects = [];
+        const slashEffects = [];
+        const explosionEffects = [];
+        const burnEffects = [];
+        const frostHitEffects = [];
+
         // Canvas setup
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -2477,8 +2491,34 @@
             }
         };
 
-        const bossFireballs = [];
-        const ultimateEffects = [];
+        // Compatibility function for old playSfx calls
+        function playSfx(soundName) {
+            try {
+                switch (soundName) {
+                    case 'punch':
+                        sounds.playPunch();
+                        break;
+                    case 'arrow':
+                    case 'shoot':
+                        sounds.playArrow();
+                        break;
+                    case 'sword':
+                    case 'slash':
+                        sounds.playSwordSlash();
+                        break;
+                    case 'ultimate':
+                        sounds.playUltimate();
+                        break;
+                    case 'pickup':
+                    case 'coin':
+                        sounds.playOrbPickup();
+                        break;
+                    // Ignore other sounds that don't have implementations
+                    default:
+                        break;
+                }
+            } catch (e) { }
+        }
 
         // Input handling
         const keys = {};
@@ -2487,6 +2527,229 @@
 
         // Tile tuning hotkeys (so you can quickly find good-looking indices)
         window.addEventListener('keydown', (e) => {
+            // Global keyboard navigation system
+            const currentScreen = gameState ? gameState.screen : 'menu';
+
+            // SPACE key during gameplay - Cast Ultimate
+            if (currentScreen === 'playing' && (e.key === ' ' || e.code === 'Space')) {
+                if (player && player.ultimateReady && !player.dead) {
+                    castUltimate();
+                    e.preventDefault();
+                    return;
+                }
+            }
+
+            // ESC key - Back button functionality
+            if (e.key === 'Escape') {
+                if (document.getElementById('characterSelect').style.display === 'block') {
+                    backToMenu();
+                } else if (document.getElementById('shop').style.display === 'block') {
+                    backToMenu();
+                } else if (document.getElementById('options').style.display === 'block') {
+                    backToMenu();
+                } else if (currentScreen === 'levelup') {
+                    // Don't allow ESC to close level up screen
+                }
+                e.preventDefault();
+                return;
+            }
+
+            // Main Menu Navigation (W/S/Space)
+            if (document.getElementById('mainMenu').style.display !== 'none' &&
+                document.getElementById('mainMenu').style.display !== '') {
+                const menuButtons = document.querySelectorAll('#mainMenu .menu-btn');
+                if (!window.mainMenuIndex) window.mainMenuIndex = 0;
+
+                if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') {
+                    window.mainMenuIndex = (window.mainMenuIndex - 1 + menuButtons.length) % menuButtons.length;
+                    highlightButton(menuButtons, window.mainMenuIndex);
+                    try { playSfx('click'); } catch (err) { }
+                    e.preventDefault();
+                } else if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') {
+                    window.mainMenuIndex = (window.mainMenuIndex + 1) % menuButtons.length;
+                    highlightButton(menuButtons, window.mainMenuIndex);
+                    try { playSfx('click'); } catch (err) { }
+                    e.preventDefault();
+                } else if (e.key === ' ' || e.key === 'Enter') {
+                    if (menuButtons[window.mainMenuIndex]) {
+                        menuButtons[window.mainMenuIndex].click();
+                        e.preventDefault();
+                    }
+                }
+            }
+
+            // Character Select Navigation (A/D/Space)
+            if (document.getElementById('characterSelect').style.display === 'block') {
+                const charCards = document.querySelectorAll('#characterSelect .character-card:not(.locked)');
+                if (!window.charSelectIndex) window.charSelectIndex = 0;
+
+                if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') {
+                    window.charSelectIndex = (window.charSelectIndex - 1 + charCards.length) % charCards.length;
+                    highlightCharCard(charCards, window.charSelectIndex);
+                    try { playSfx('click'); } catch (err) { }
+                    e.preventDefault();
+                } else if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') {
+                    window.charSelectIndex = (window.charSelectIndex + 1) % charCards.length;
+                    highlightCharCard(charCards, window.charSelectIndex);
+                    try { playSfx('click'); } catch (err) { }
+                    e.preventDefault();
+                } else if ((e.key === ' ' || e.key === 'Enter') && !window.preventCharSelectSpace) {
+                    if (charCards[window.charSelectIndex]) {
+                        charCards[window.charSelectIndex].click();
+                        e.preventDefault();
+                    }
+                }
+            }
+
+            // Shop Navigation (W/S/A/D/Space)
+            if (document.getElementById('shop').style.display === 'block') {
+                const shopCards = document.querySelectorAll('#shop .character-card');
+                if (!window.shopIndex) window.shopIndex = 0;
+
+                const cols = 3; // 3 cards per row
+                const rows = Math.ceil(shopCards.length / cols);
+                const currentRow = Math.floor(window.shopIndex / cols);
+                const currentCol = window.shopIndex % cols;
+
+                if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') {
+                    const newRow = (currentRow - 1 + rows) % rows;
+                    window.shopIndex = newRow * cols + currentCol;
+                    if (window.shopIndex >= shopCards.length) window.shopIndex = shopCards.length - 1;
+                    highlightShopCard(shopCards, window.shopIndex);
+                    try { playSfx('click'); } catch (err) { }
+                    e.preventDefault();
+                } else if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') {
+                    const newRow = (currentRow + 1) % rows;
+                    window.shopIndex = newRow * cols + currentCol;
+                    if (window.shopIndex >= shopCards.length) window.shopIndex = currentCol;
+                    highlightShopCard(shopCards, window.shopIndex);
+                    try { playSfx('click'); } catch (err) { }
+                    e.preventDefault();
+                } else if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') {
+                    window.shopIndex = (window.shopIndex - 1 + shopCards.length) % shopCards.length;
+                    highlightShopCard(shopCards, window.shopIndex);
+                    try { playSfx('click'); } catch (err) { }
+                    e.preventDefault();
+                } else if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') {
+                    window.shopIndex = (window.shopIndex + 1) % shopCards.length;
+                    highlightShopCard(shopCards, window.shopIndex);
+                    try { playSfx('click'); } catch (err) { }
+                    e.preventDefault();
+                }
+            }
+
+            // Game Over Screen Navigation (A/D/Space)
+            if (document.getElementById('gameOverScreen').style.display === 'flex') {
+                const gameOverButtons = document.querySelectorAll('#gameOverScreen .menu-btn');
+                if (!window.gameOverIndex) window.gameOverIndex = 0;
+
+                if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') {
+                    window.gameOverIndex = (window.gameOverIndex - 1 + gameOverButtons.length) % gameOverButtons.length;
+                    highlightButton(gameOverButtons, window.gameOverIndex);
+                    try { playSfx('click'); } catch (err) { }
+                    e.preventDefault();
+                } else if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') {
+                    window.gameOverIndex = (window.gameOverIndex + 1) % gameOverButtons.length;
+                    highlightButton(gameOverButtons, window.gameOverIndex);
+                    try { playSfx('click'); } catch (err) { }
+                    e.preventDefault();
+                } else if (e.key === ' ' || e.key === 'Enter') {
+                    if (gameOverButtons[window.gameOverIndex]) {
+                        gameOverButtons[window.gameOverIndex].click();
+                        e.preventDefault();
+                    }
+                }
+            }
+
+            // Victory Screen Navigation (A/D/Space)
+            if (document.getElementById('victoryScreen').style.display === 'flex') {
+                const victoryButtons = document.querySelectorAll('#victoryScreen .menu-btn');
+                if (!window.victoryIndex) window.victoryIndex = 0;
+
+                if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') {
+                    window.victoryIndex = (window.victoryIndex - 1 + victoryButtons.length) % victoryButtons.length;
+                    highlightButton(victoryButtons, window.victoryIndex);
+                    try { playSfx('click'); } catch (err) { }
+                    e.preventDefault();
+                } else if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') {
+                    window.victoryIndex = (window.victoryIndex + 1) % victoryButtons.length;
+                    highlightButton(victoryButtons, window.victoryIndex);
+                    try { playSfx('click'); } catch (err) { }
+                    e.preventDefault();
+                } else if (e.key === ' ' || e.key === 'Enter') {
+                    if (victoryButtons[window.victoryIndex]) {
+                        victoryButtons[window.victoryIndex].click();
+                        e.preventDefault();
+                    }
+                }
+            }
+
+            // Options Navigation (W/S/Space)
+            if (document.getElementById('options').style.display === 'block') {
+                const optionButtons = document.querySelectorAll('#options .menu-btn, #options .option-button');
+                if (!window.optionsIndex) window.optionsIndex = 0;
+
+                if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') {
+                    window.optionsIndex = (window.optionsIndex - 1 + optionButtons.length) % optionButtons.length;
+                    highlightButton(optionButtons, window.optionsIndex);
+                    try { playSfx('click'); } catch (err) { }
+                    e.preventDefault();
+                } else if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') {
+                    window.optionsIndex = (window.optionsIndex + 1) % optionButtons.length;
+                    highlightButton(optionButtons, window.optionsIndex);
+                    try { playSfx('click'); } catch (err) { }
+                    e.preventDefault();
+                } else if (e.key === ' ' || e.key === 'Enter') {
+                    if (optionButtons[window.optionsIndex]) {
+                        optionButtons[window.optionsIndex].click();
+                        e.preventDefault();
+                    }
+                }
+            }
+
+            // Handle upgrade selection with A/D/Space keys
+            if (currentScreen === 'levelup') {
+                const grid = document.getElementById('upgradesGrid');
+                if (grid) {
+                    const cards = Array.from(grid.querySelectorAll('.upgrade-card'));
+                    if (cards.length > 0) {
+                        // Initialize selection index if not set
+                        if (typeof window.selectedUpgradeIndex === 'undefined') {
+                            window.selectedUpgradeIndex = 0;
+                        }
+
+                        // Remove previous selection
+                        cards.forEach(card => card.classList.remove('selected'));
+
+                        if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') {
+                            // Move left
+                            window.selectedUpgradeIndex = (window.selectedUpgradeIndex - 1 + cards.length) % cards.length;
+                            try { playSfx('click'); } catch (err) { }
+                            e.preventDefault();
+                        } else if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') {
+                            // Move right
+                            window.selectedUpgradeIndex = (window.selectedUpgradeIndex + 1) % cards.length;
+                            try { playSfx('click'); } catch (err) { }
+                            e.preventDefault();
+                        } else if (e.key === ' ' || e.key === 'Enter') {
+                            // Select current upgrade
+                            const selectedCard = cards[window.selectedUpgradeIndex];
+                            if (selectedCard) {
+                                selectedCard.click();
+                                e.preventDefault();
+                                return;
+                            }
+                        }
+
+                        // Highlight selected card
+                        if (cards[window.selectedUpgradeIndex]) {
+                            cards[window.selectedUpgradeIndex].classList.add('selected');
+                            cards[window.selectedUpgradeIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        }
+                    }
+                }
+            }
+
             // [ and ] cycle FLOOR_TILE
             if (e.code === 'BracketLeft') { FLOOR_TILE = Math.max(0, FLOOR_TILE - 1); FLOOR_VARIANTS = [FLOOR_TILE, FLOOR_TILE, FLOOR_TILE, FLOOR_TILE, FLOOR_TILE + 1, FLOOR_TILE + 2]; regenMap(); }
             if (e.code === 'BracketRight') { FLOOR_TILE = FLOOR_TILE + 1; FLOOR_VARIANTS = [FLOOR_TILE, FLOOR_TILE, FLOOR_TILE, FLOOR_TILE, FLOOR_TILE + 1, FLOOR_TILE + 2]; regenMap(); }
@@ -2496,6 +2759,49 @@
             // R regenerates map noise
             if (e.code === 'KeyR') { regenMap(); }
         });
+
+        // Helper functions for highlighting
+        function highlightButton(buttons, index) {
+            buttons.forEach((btn, i) => {
+                if (i === index) {
+                    btn.style.transform = 'scale(1.05)';
+                    btn.style.boxShadow = '0 0 20px rgba(212, 175, 55, 0.8)';
+                    btn.style.borderColor = '#fff';
+                } else {
+                    btn.style.transform = 'scale(1)';
+                    btn.style.boxShadow = '';
+                    btn.style.borderColor = 'var(--gold)';
+                }
+            });
+        }
+
+        function highlightCharCard(cards, index) {
+            cards.forEach((card, i) => {
+                if (i === index) {
+                    card.style.transform = 'scale(1.03) translateY(-5px)';
+                    card.style.boxShadow = '0 10px 30px rgba(212, 175, 55, 0.6)';
+                    card.style.borderColor = '#fff';
+                } else {
+                    card.style.transform = 'scale(1)';
+                    card.style.boxShadow = '';
+                    card.style.borderColor = 'var(--gold)';
+                }
+            });
+        }
+
+        function highlightShopCard(cards, index) {
+            cards.forEach((card, i) => {
+                if (i === index) {
+                    card.style.transform = 'scale(1.03) translateY(-5px)';
+                    card.style.boxShadow = '0 10px 30px rgba(212, 175, 55, 0.6)';
+                    card.style.borderColor = '#fff';
+                } else {
+                    card.style.transform = 'scale(1)';
+                    card.style.boxShadow = '';
+                    card.style.borderColor = 'var(--gold)';
+                }
+            });
+        }
 
         // Mouse for mobile touch
         let mouseX = 0;
@@ -2598,6 +2904,16 @@
 
                 const t = e.touches[0];
 
+                // Right side tap = cast ultimate (if ready)
+                if (t.clientX > window.innerWidth * 0.6) {
+                    if (player.ultimateReady && !player.dead) {
+                        castUltimate();
+                        e.preventDefault();
+                        return;
+                    }
+                    return;
+                }
+
                 // Only allow joystick start on left half of the screen
                 if (t.clientX > window.innerWidth * 0.6) return;
 
@@ -2640,18 +2956,9 @@
         // Projectiles
         const projectiles = [];
 
-        // Slash effects for melee attacks
-        const slashEffects = [];
-
-        // Explosion effects for explosive strikes
-        // SFX on explosion spawn
-
-        const explosionEffects = [];
-
         // XP Orbs
         const xpOrbs = [];
         const lightningBolts = []; // Chain lightning visual effects
-        const burnEffects = []; // Burning rage visual effects
 
         // Game timer
         let gameTimer = 300; // 5 minutes in seconds
@@ -2679,8 +2986,8 @@
             },
             { name: 'Extended Range', description: '+30% Attack Range', apply: (p) => { p.attackRange *= 1.3; } },
             { name: 'Life Steal', description: 'Heal 2 HP per kill', apply: (p) => { p.upgrades.push('lifesteal'); } },
-            { name: 'Double Shot', description: 'Fire 2 additional projectiles', apply: (p) => { p.upgrades.push('doubleshot'); } },
-            { name: 'Piercing', description: 'Attacks pierce enemies', apply: (p) => { p.upgrades.push('pierce'); } },
+            { name: 'Double Shot', description: 'Fire +1 projectile (stacks)', apply: (p) => { p.upgrades.push('doubleshot'); } },
+            { name: 'Piercing', description: 'Attacks pierce enemies (unique)', unique: true, apply: (p) => { if (!p.upgrades.includes('pierce')) p.upgrades.push('pierce'); } },
             { name: 'Critical Strike', description: '20% chance for 2x damage', apply: (p) => { p.upgrades.push('crit'); } },
             { name: 'Regeneration', description: 'Heal 1 HP per second', apply: (p) => { p.upgrades.push('regen'); } },
             {
@@ -2697,13 +3004,23 @@
                     });
                 }
             },
-            { name: 'Vampiric Aura', description: 'Heal 5% max HP per kill', apply: (p) => { p.upgrades.push('vampire'); } },
+            {
+                name: 'Vampiric Aura', description: 'Heal +5% max HP per kill (stacks)', apply: (p) => {
+                    p.vampiricHealPct = (p.vampiricHealPct || 0) + 0.05;
+                    if (!p.upgrades.includes('vampire')) p.upgrades.push('vampire');
+                }
+            },
             { name: 'Explosive Strikes', description: 'Attacks have 15% splash damage', apply: (p) => { p.upgrades.push('explosion'); } },
             { name: 'Ghost Shield', description: 'Absorb next 20 damage', apply: (p) => { p.shield = (p.shield || 0) + 20; } },
             { name: 'Rapid Fire', description: '+30% Attack Speed', apply: (p) => { p.attackSpeed *= 0.7; } },
             { name: 'Berserker', description: '+10 Damage, -10 Max HP', apply: (p) => { p.damage += 10; p.maxHealth -= 10; p.health = Math.min(p.health, p.maxHealth); p.berserker = true; p.upgrades.push('berserker'); } },
-            { name: 'Multi-Strike', description: 'Fire 5 projectiles in spread', apply: (p) => { p.upgrades.push('multishot'); } },
-            { name: 'Bloodlust', description: '+2% damage per kill', apply: (p) => { p.upgrades.push('bloodlust'); } },
+            { name: 'Multi-Strike', description: 'Fire 3 projectiles in spread (stacks)', apply: (p) => { p.upgrades.push('multishot'); } },
+            {
+                name: 'Bloodlust', description: '+2% damage per kill (stacks)', weight: 0.18, apply: (p) => {
+                    p.bloodlustPct = (p.bloodlustPct || 0) + 0.02;
+                    if (!p.upgrades.includes('bloodlust')) p.upgrades.push('bloodlust');
+                }
+            },
             // NEW UPGRADES AND PASSIVES
             { name: 'Thorns', description: 'Reflect 25% damage to attackers', apply: (p) => { p.upgrades.push('thorns'); } },
             { name: 'Dodge Master', description: '15% chance to dodge attacks', apply: (p) => { p.upgrades.push('dodge'); } },
@@ -2724,6 +3041,21 @@
             document.getElementById('mainMenu').style.display = 'none';
             document.getElementById('characterSelect').style.display = 'block';
             updateCharacterCards();
+
+            // Initialize character selection index and highlight first character
+            window.charSelectIndex = 0;
+            setTimeout(() => {
+                const charCards = document.querySelectorAll('#characterSelect .character-card:not(.locked)');
+                if (charCards.length > 0) {
+                    highlightCharCard(charCards, 0);
+                }
+            }, 100);
+
+            // Prevent SPACE from carrying over from previous screen
+            window.preventCharSelectSpace = true;
+            setTimeout(() => {
+                window.preventCharSelectSpace = false;
+            }, 200);
         }
 
         // Toast notification system for warnings
@@ -3035,11 +3367,23 @@
             enemies.length = 0;
             projectiles.length = 0;
             xpOrbs.length = 0;
+            bossFireballs.length = 0;
 
             // Reset timer
             gameTimer = 300;
             lastTimerUpdate = performance.now();
             lastEnemySpawn = performance.now();
+
+            // Reset boss events
+            window.triggeredBossEvents = new Set();
+            if (window._spiralFireballInterval) {
+                clearInterval(window._spiralFireballInterval);
+                window._spiralFireballInterval = null;
+            }
+            if (window._waveFireballInterval) {
+                clearInterval(window._waveFireballInterval);
+                window._waveFireballInterval = null;
+            }
 
             // Update HUD
             updateHUD();
@@ -3210,26 +3554,83 @@
             }
         }
 
+
+        // Weighted upgrade roll with uniqueness + anti-overflow safety
+        function rollUpgradeOptions(count) {
+            const opts = [];
+            if (!player) return opts;
+
+            const pool = upgradePool.filter(u => {
+                if (!u) return false;
+                if (u.unique && u.name === 'Piercing' && player.upgrades.includes('pierce')) return false;
+                if (u.name === 'Berserker' && player.berserker) return false;
+                return true;
+            });
+
+            if (pool.length <= count) return pool.slice(0, count);
+
+            const pickOne = (arr) => {
+                let total = 0;
+                for (const u of arr) total += (typeof u.weight === 'number' ? u.weight : 1);
+                let r = Math.random() * total;
+                for (let i = 0; i < arr.length; i++) {
+                    const w = (typeof arr[i].weight === 'number' ? arr[i].weight : 1);
+                    r -= w;
+                    if (r <= 0) return i;
+                }
+                return arr.length - 1;
+            };
+
+            const temp = pool.slice();
+            for (let i = 0; i < count && temp.length > 0; i++) {
+                const idx = pickOne(temp);
+                opts.push(temp[idx]);
+                temp.splice(idx, 1);
+            }
+            return opts;
+        }
+
+
         function levelUp() {
 
             try { playSfx('levelup'); } catch (e) { }
             gameState.screen = 'levelup';
             document.getElementById('levelUpScreen').style.display = 'flex';
 
-            // Generate 3 random upgrades
-            const shuffled = [...upgradePool].sort(() => Math.random() - 0.5);
-            const options = shuffled.slice(0, 3);
+            // Reset upgrade selection
+            window.selectedUpgradeIndex = 0;
+
+            // Generate 3 upgrade options (weighted + uniqueness)
+            const options = rollUpgradeOptions(3);
 
             const grid = document.getElementById('upgradesGrid');
             grid.innerHTML = '';
 
             options.forEach((upgrade, index) => {
                 const card = document.createElement('div');
-                card.className = 'upgrade-card';
-                card.innerHTML = `
-                    <div class="upgrade-name">${upgrade.name}</div>
-                    <div class="upgrade-description">${upgrade.description}</div>
-                `;
+                card.className = `upgrade-card ${index === 0 ? 'selected' : ''}`;
+
+                // Check if this is the first time picking this upgrade
+                const upgradeKey = upgrade.name.toLowerCase().replace(/\s+/g, '_');
+                const isFirstPick = !player.upgrades || !player.upgrades.includes(upgradeKey);
+
+                // For first pick, show effect description. For repeats, just show the upgrade
+                let displayHTML;
+                if (isFirstPick) {
+                    // First pick: Show full name with effect description
+                    displayHTML = `
+                        <div class="upgrade-name">${upgrade.name}</div>
+                        <div class="upgrade-description">${upgrade.description}</div>
+                    `;
+                } else {
+                    // Repeat pick: Shorter display
+                    displayHTML = `
+                        <div class="upgrade-name">${upgrade.name}</div>
+                        <div class="upgrade-description" style="font-size: 0.9rem; opacity: 0.8;">Level Up</div>
+                    `;
+                }
+
+                card.innerHTML = displayHTML;
                 card.onclick = () => selectUpgrade(upgrade);
                 grid.appendChild(card);
             });
@@ -3475,171 +3876,193 @@
                     });
                 };
 
-                shootProjectile();
-                try {
-                    if (player.name === 'Luna') playSfx('arrow');
-                    else playSfx('shoot');
-                } catch (e) { }
-
-                // Double Shot + Multi-Strike stacking (works for ALL ranged characters)
+                // Double Shot + Multi-Strike stacking (applies to ALL ranged characters)
                 const dsLevel = player.upgrades.filter(u => u === 'doubleshot').length;
                 const msLevel = player.upgrades.filter(u => u === 'multishot').length;
 
-                // Strike count rules:
-                // - Double Shot alone => 2
-                // - Multi-Strike first time => 3
-                // - Each additional Multi-Strike => +1
-                // - If Double Shot exists and Multi-Strike chosen => +1 strike (e.g. 4)
-                let strikes = 1;
-                if (msLevel > 0) {
-                    strikes = 3 + (msLevel - 1) + (dsLevel > 0 ? 1 : 0);
-                } else if (dsLevel > 0) {
-                    strikes = 2;
-                }
+                // Projectile count rules:
+                // - Multi-Strike: base becomes 3 projectiles on first pick, then +1 per pick (3→4→5...)
+                // - Double Shot: Creates additional volleys with delay, doesn't add to count
+                let projCount = 1;
+                if (msLevel > 0) projCount = 3 + (msLevel - 1);
+                projCount = Math.min(projCount, 12);
 
-                // Direction rules:
-                // - Double Shot: same direction (fires twice with delay)
-                // - Multi-Strike: spreads in multiple directions
-                if (strikes > 1) {
-                    const spread = 0.25;
-                    const offsets = [];
+                const playShotSfx = () => {
+                    try {
+                        if (player.name === 'Luna') playSfx('arrow');
+                        else playSfx('shoot');
+                    } catch (e) { }
+                };
+
+                // Function to fire a volley of projectiles
+                const fireVolley = () => {
                     if (msLevel > 0) {
-                        // Multi-Strike: fire in 8 directions for true multi-directional
-                        const directions = 8;
-                        for (let i = 0; i < directions; i++) {
-                            const angle = (Math.PI * 2 / directions) * i;
-                            shootProjectile(angle - Math.atan2(nearest.y - player.y, nearest.x - player.x));
+                        // Multi-Strike: spread around aim direction
+                        const totalSpread = Math.min(0.75, 0.24 * (projCount - 1));
+                        for (let i = 0; i < projCount; i++) {
+                            const t = (projCount === 1) ? 0 : (i / (projCount - 1)) - 0.5;
+                            const off = t * totalSpread;
+                            shootProjectile(off);
                         }
+                        playShotSfx();
                     } else {
-                        // Double Shot only - fire with delay
-                        offsets.push(0);
-                        while (offsets.length < strikes) offsets.push(0);
-                        for (let i = 0; i < offsets.length; i++) {
-                            if (i === 0) {
-                                shootProjectile(offsets[i]);
-                            } else {
-                                // Delay subsequent shots by 150ms each
-                                setTimeout(() => {
-                                    shootProjectile(offsets[i]);
-                                    try {
-                                        if (player.name === 'Luna') playSfx('arrow');
-                                        else playSfx('shoot');
-                                    } catch (e) { }
-                                }, i * 150);
-                            }
+                        // Single shot: fire all projectiles in same direction
+                        for (let i = 0; i < projCount; i++) {
+                            shootProjectile(0);
                         }
+                        playShotSfx();
+                    }
+                };
+
+                // Fire first volley immediately
+                fireVolley();
+
+                // Double Shot: Fire additional delayed volleys
+                if (dsLevel > 0) {
+                    for (let v = 1; v <= dsLevel; v++) {
+                        setTimeout(() => {
+                            // Re-find target (enemy might have moved or died)
+                            let currentNearest = null;
+                            let currentMinDist = Infinity;
+                            for (let i = 0; i < enemies.length; i++) {
+                                const e = enemies[i];
+                                if (e.dead) continue;
+                                const dx = e.x - player.x;
+                                const dy = e.y - player.y;
+                                const d = Math.sqrt(dx * dx + dy * dy);
+                                if (d < currentMinDist && d <= player.attackRange) {
+                                    currentMinDist = d;
+                                    currentNearest = e;
+                                }
+                            }
+
+                            if (currentNearest) {
+                                // Update angle to current target
+                                const currentAngle = Math.atan2(currentNearest.y - player.y, currentNearest.x - player.x);
+                                const shootDelayedProjectile = (angleOffset = 0) => {
+                                    projectiles.push({
+                                        x: player.x,
+                                        y: player.y,
+                                        vx: Math.cos(currentAngle + angleOffset) * player.projectileSpeed,
+                                        vy: Math.sin(currentAngle + angleOffset) * player.projectileSpeed,
+                                        radius: 5,
+                                        damage: player.damage,
+                                        range: player.attackRange,
+                                        traveled: 0,
+                                        pierce: player.upgrades.includes('pierce')
+                                    });
+                                };
+
+                                // Fire delayed volley
+                                if (msLevel > 0) {
+                                    const totalSpread = Math.min(0.75, 0.24 * (projCount - 1));
+                                    for (let i = 0; i < projCount; i++) {
+                                        const t = (projCount === 1) ? 0 : (i / (projCount - 1)) - 0.5;
+                                        const off = t * totalSpread;
+                                        shootDelayedProjectile(off);
+                                    }
+                                } else {
+                                    for (let i = 0; i < projCount; i++) {
+                                        shootDelayedProjectile(0);
+                                    }
+                                }
+                                playShotSfx();
+                            }
+                        }, v * 150); // 150ms delay between volleys
                     }
                 }
             } else {
-                // Melee strikes (already confirmed in range)
+                // Melee strikes (Double Shot + Multi-Strike)
                 const dsLevel = player.upgrades.filter(u => u === 'doubleshot').length;
                 const msLevel = player.upgrades.filter(u => u === 'multishot').length;
 
+                // Strike count rules mirror ranged:
+                // - Double Shot: +1 strike per pick (1→2→3...)
+                // - Multi-Strike: base becomes 3 strikes on first pick, then +1 per pick (3→4→5...)
+                // - If both exist, counts add together.
                 let strikes = 1;
-                if (msLevel > 0) {
-                    strikes = 3 + (msLevel - 1) + (dsLevel > 0 ? 1 : 0);
-                } else if (dsLevel > 0) {
-                    strikes = 2;
-                }
+                if (msLevel > 0) strikes = 3 + (msLevel - 1);
+                strikes += dsLevel;
+                strikes = Math.min(strikes, 12);
 
-                if (msLevel > 0) {
-                    // Multi-Strike for melee: attack in 8 directions
-                    const directions = 8;
-                    for (let dir = 0; dir < directions; dir++) {
-                        const angle = (Math.PI * 2 / directions) * dir;
-                        const targetX = player.x + Math.cos(angle) * player.attackRange;
-                        const targetY = player.y + Math.sin(angle) * player.attackRange;
+                const baseAngle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
 
-                        // Find enemy in this direction
-                        let target = null;
-                        let bestDist = Infinity;
-                        for (const e of enemies) {
-                            if (!e || e.dead) continue;
-                            const ex = e.x - player.x;
-                            const ey = e.y - player.y;
-                            const d = Math.hypot(ex, ey);
-                            if (d > player.attackRange + e.radius) continue;
-                            const a = Math.atan2(ey, ex);
-                            let da = Math.abs(a - angle);
-                            da = Math.min(da, Math.PI * 2 - da);
-                            if (da < 0.6 && d < bestDist) {
-                                bestDist = d;
-                                target = e;
-                            }
-                        }
-
-                        if (target) {
-                            let damage = player.damage;
-                            if (player.upgrades.includes('crit') && Math.random() < 0.2) {
-                                damage *= 2;
-                                try { playSfx('crit'); } catch (e) { }
-                            }
-                            target.health -= damage;
-                            if (target.health <= 0) {
-                                markEnemyDead(target);
-                            }
-
-                            // Create slash effect
-                            slashEffects.push({
-                                x: player.x,
-                                y: player.y,
-                                angle: angle,
-                                range: player.attackRange,
-                                lifetime: 0.3,
-                                age: 0
-                            });
+                const findMeleeTarget = (angle) => {
+                    let target = null;
+                    let bestDist = Infinity;
+                    const angleWindow = 0.75;
+                    for (const e of enemies) {
+                        if (!e || e.dead) continue;
+                        const ex = e.x - player.x;
+                        const ey = e.y - player.y;
+                        const d = Math.hypot(ex, ey);
+                        if (d > player.attackRange + e.radius) continue;
+                        const a = Math.atan2(ey, ex);
+                        let da = Math.abs(a - angle);
+                        da = Math.min(da, Math.PI * 2 - da);
+                        if (da <= angleWindow && d < bestDist) {
+                            bestDist = d;
+                            target = e;
                         }
                     }
+                    return target;
+                };
 
-                    // Play sound once for multi-strike
+                const doStrike = (angle) => {
+                    const target = findMeleeTarget(angle) || nearest;
+                    if (!target || target.dead) return;
+
+                    let damage = player.damage;
+                    if (player.upgrades.includes('crit') && Math.random() < 0.2) {
+                        damage *= 2;
+                        try { playSfx('crit'); } catch (e) { }
+                    }
+
+                    target.health -= damage;
+
+                    // Frost Touch: slow + aura on melee hit
+                    if (player.upgrades.includes('frost')) {
+                        target.slowUntil = performance.now() + 2000;
+                        target.slowFactor = 0.7;
+                        target.frostFlash = 0.25;
+                        frostHitEffects.push({ x: target.x, y: target.y, age: 0, lifetime: 0.35, r: target.radius + 10 });
+                        if (frostHitEffects.length > 120) frostHitEffects.splice(0, frostHitEffects.length - 120);
+                    }
+                    if (target.health <= 0) {
+                        markEnemyDead(target);
+                    }
+
                     try {
                         if (player.name === 'Blade') playSfx('sword');
                         else if (player.name === 'Rex') playSfx('punch');
                         else playSfx('slash');
                     } catch (e) { }
+
+                    slashEffects.push({
+                        x: player.x,
+                        y: player.y,
+                        angle: angle,
+                        range: player.attackRange,
+                        lifetime: 0.3,
+                        age: 0
+                    });
+                };
+
+                if (strikes <= 1) {
+                    doStrike(baseAngle);
+                } else if (msLevel > 0) {
+                    // Multi-Strike: spread strikes slightly in front of the player
+                    const totalSpread = Math.min(1.0, 0.30 * (strikes - 1));
+                    for (let i = 0; i < strikes; i++) {
+                        const t = (strikes === 1) ? 0 : (i / (strikes - 1)) - 0.5;
+                        const off = t * totalSpread;
+                        setTimeout(() => doStrike(baseAngle + off), i * 110);
+                    }
                 } else {
-                    // Double-shot or single strike
-                    const baseAngle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
-
-                    const performStrike = (strikeIndex) => {
-                        const target = nearest;
-                        if (!target || target.dead) return;
-
-                        let damage = player.damage;
-                        if (player.upgrades.includes('crit') && Math.random() < 0.2) {
-                            damage *= 2;
-                            try { playSfx('crit'); } catch (e) { }
-                        }
-
-                        target.health -= damage;
-                        if (target.health <= 0) {
-                            markEnemyDead(target);
-                        }
-
-                        // Play strike sound
-                        try {
-                            if (player.name === 'Blade') playSfx('sword');
-                            else if (player.name === 'Rex') playSfx('punch');
-                            else playSfx('slash');
-                        } catch (e) { }
-
-                        // Create slash effect
-                        slashEffects.push({
-                            x: player.x,
-                            y: player.y,
-                            angle: baseAngle,
-                            range: player.attackRange,
-                            lifetime: 0.3,
-                            age: 0
-                        });
-                    };
-
-                    // First strike immediate
-                    performStrike(0);
-
-                    // Additional strikes with delay (double-shot)
-                    for (let s = 1; s < strikes; s++) {
-                        setTimeout(() => performStrike(s), s * 150);
+                    // Double Shot only: repeated strikes at the same angle
+                    doStrike(baseAngle);
+                    for (let i = 1; i < strikes; i++) {
+                        setTimeout(() => doStrike(baseAngle), i * 110);
                     }
                 }
 
@@ -3721,6 +4144,11 @@
                     const dx = enemy.x - player.x;
                     const dy = enemy.y - player.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
+
+
+                    // Frost slow
+                    const slowMul = (enemy.slowUntil && now < enemy.slowUntil) ? (enemy.slowFactor || 0.7) : 1;
+                    const eSpeed = enemy.speed * slowMul;
                     if (dist < 300) {
                         enemy.health -= 50;
                         if (enemy.health <= 0) markEnemyDead(enemy);
@@ -3778,16 +4206,17 @@
                 player.health = Math.min(player.maxHealth, player.health + 2);
             }
 
-            // Vampiric Aura
-            if (player.upgrades.includes('vampire')) {
-                // Heal a small % of max HP per kill (subtle sustain)
-                player.health = Math.min(player.maxHealth, player.health + player.maxHealth * 0.02);
+            // Vampiric Aura (stacking % heal per kill)
+            if ((player.vampiricHealPct || 0) > 0 || player.upgrades.includes('vampire')) {
+                const healPct = (player.vampiricHealPct || 0.05); // legacy fallback
+                player.health = Math.min(player.maxHealth, player.health + player.maxHealth * healPct);
                 try { playSfx('vampire'); } catch (e) { }
             }
 
-            // Bloodlust - increase damage per kill
-            if (player.upgrades.includes('bloodlust')) {
-                player.damage *= 1.02;
+            // Bloodlust (stacking % damage gain per kill)
+            if ((player.bloodlustPct || 0) > 0 || player.upgrades.includes('bloodlust')) {
+                const pct = (player.bloodlustPct || 0.02); // legacy fallback
+                player.damage *= (1 + pct);
             }
 
             // Spawn XP - Event bosses give HUGE XP rewards!
@@ -3809,47 +4238,46 @@
             try {
                 const now = performance.now();
 
-                // Spawn a special boss enemy for each event
+                // Spawn multiple bosses for each event
                 const minutesSurvived = (300 - gameTimer) / 60;
                 const difficultyRamp = (1 + Math.min(2.5, minutesSurvived * 0.4)) * (player.difficultyMultiplier || 1.0);
 
                 switch (minuteRemaining) {
                     case 4:
-                        // 4 minutes left - First Boss
+                        // 4 minutes left - First Boss (1 boss)
                         showToastNotification('⚠️ BOSS EVENT: SHADOW BEAST! ⚠️', '#ff0000');
                         try { playSfx('warn'); } catch (e) { }
                         setTimeout(() => {
-                            spawnEventBoss(4, difficultyRamp);
-                            // Simple boss, no special pattern
+                            spawnEventBoss(4, difficultyRamp, 1); // Spawn 1 boss
                         }, 2000);
                         break;
 
                     case 3:
-                        // 3 minutes left - Cross Boss
-                        showToastNotification('⚠️ BOSS EVENT: CROSSFIRE DEMON! ⚠️', '#ff0000');
+                        // 3 minutes left - Cross Boss (2 bosses)
+                        showToastNotification('⚠️ BOSS EVENT: CROSSFIRE DEMONS! ⚠️', '#ff0000');
                         try { playSfx('warn'); } catch (e) { }
                         setTimeout(() => {
-                            spawnEventBoss(3, difficultyRamp);
+                            spawnEventBoss(3, difficultyRamp, 2); // Spawn 2 bosses
                             spawnCrossFireballs();
                         }, 2000);
                         break;
 
                     case 2:
-                        // 2 minutes left - Wave Boss
-                        showToastNotification('⚠️ BOSS EVENT: TSUNAMI DEMON! ⚠️', '#ff0000');
+                        // 2 minutes left - Wave Boss (3 bosses)
+                        showToastNotification('⚠️ BOSS EVENT: TSUNAMI DEMONS! ⚠️', '#ff0000');
                         try { playSfx('warn'); } catch (e) { }
                         setTimeout(() => {
-                            spawnEventBoss(2, difficultyRamp);
+                            spawnEventBoss(2, difficultyRamp, 3); // Spawn 3 bosses
                             spawnWaveFireballs();
                         }, 2000);
                         break;
 
                     case 1:
-                        // 1 minute left - FINAL BOSS (SPIRAL DEMON)
-                        showToastNotification('🔥 FINAL BOSS: SPIRAL DEMON! 🔥', '#ff0000');
+                        // 1 minute left - FINAL BOSS (5 bosses)
+                        showToastNotification('🔥 FINAL BOSS: SPIRAL DEMONS! 🔥', '#ff0000');
                         try { playSfx('warn'); } catch (e) { }
                         setTimeout(() => {
-                            spawnEventBoss(1, difficultyRamp);
+                            spawnEventBoss(1, difficultyRamp, 5); // Spawn 5 bosses
                             spawnSpiralFireballs();
                         }, 2000);
                         break;
@@ -3859,68 +4287,71 @@
             }
         }
 
-        // Spawn special event boss enemy
-        function spawnEventBoss(eventNumber, difficultyRamp) {
+        // Spawn special event boss enemy (can spawn multiple)
+        function spawnEventBoss(eventNumber, difficultyRamp, count = 1) {
             if (!player || !enemies) {
                 console.error("Cannot spawn boss: player or enemies undefined");
                 return;
             }
 
             try {
-                // Spawn near player but not too close
-                const spawnDist = 350;
-                const ang = Math.random() * Math.PI * 2;
-                let x = player.x + Math.cos(ang) * spawnDist;
-                let y = player.y + Math.sin(ang) * spawnDist;
+                // Spawn multiple bosses in different positions
+                for (let b = 0; b < count; b++) {
+                    // Spawn near player but not too close, spread out if multiple
+                    const spawnDist = 350 + (b * 100); // Spread out multiple bosses
+                    const ang = (Math.PI * 2 / count) * b + Math.random() * 0.5; // Evenly distribute around player
+                    let x = player.x + Math.cos(ang) * spawnDist;
+                    let y = player.y + Math.sin(ang) * spawnDist;
 
-                // Clamp to world bounds
-                x = clamp(x, 40, WORLD.w - 40);
-                y = clamp(y, 40, WORLD.h - 40);
+                    // Clamp to world bounds
+                    x = clamp(x, 40, WORLD.w - 40);
+                    y = clamp(y, 40, WORLD.h - 40);
 
-                // Boss stats scale with event number (later bosses are stronger)
-                const baseHealth = 500 + (eventNumber * 200); // 700, 900, 1100, 1300 (much tankier)
-                const baseDamage = 15 + (eventNumber * 5); // 20, 25, 30, 35 (more dangerous)
-                const bossSpeed = 70 + (eventNumber * 10); // 80, 90, 100, 110
+                    // Boss stats scale with event number (later bosses are stronger)
+                    const baseHealth = 500 + (eventNumber * 200); // 700, 900, 1100, 1300 (much tankier)
+                    const baseDamage = 15 + (eventNumber * 5); // 20, 25, 30, 35 (more dangerous)
+                    const bossSpeed = 70 + (eventNumber * 10); // 80, 90, 100, 110
 
-                // Scale health with player level to keep bosses challenging
-                const levelScaling = 1 + (player.level * 0.15); // +15% health per player level
-                const finalHealth = baseHealth * difficultyRamp * levelScaling;
+                    // Scale health with player level to keep bosses challenging
+                    const levelScaling = 1 + (player.level * 0.15); // +15% health per player level
+                    const finalHealth = baseHealth * difficultyRamp * levelScaling;
 
-                enemies.push({
-                    x,
-                    y,
-                    id: 'boss' + eventNumber + '_' + (enemyIdSeq++),
-                    spriteScale: 1.2, // Larger than normal bosses
-                    hurtTimer: 0,
-                    dead: false,
-                    deadTimer: 0,
-                    radius: 45, // Bigger radius
-                    health: finalHealth,
-                    maxHealth: finalHealth,
-                    damage: baseDamage * difficultyRamp,
-                    speed: bossSpeed,
-                    isBoss: true,
-                    isEventBoss: true, // Mark as special event boss
-                    eventNumber: eventNumber,
-                    behavior: 'chase',
-                    behaviorTimer: 0,
-                    circleAngle: Math.random() * Math.PI * 2,
-                    zigzagPhase: 0,
-                    facingRight: true,
-                    floatSpeed: 1.2 + Math.random() * 0.5,
-                    floatOffset: Math.random() * Math.PI * 2,
-                    wobbleSeed: Math.random() * 9999,
-                    dashCooldown: 4000,
-                    lastDash: 0,
-                    isDashing: false,
-                    dashSpeed: 350,
-                    dashDuration: 0.6,
-                    dashTimer: 0,
-                    dashDirX: 0,
-                    dashDirY: 0,
-                    fireballCooldown: 2000, // Faster fireball attacks
-                    lastFireball: 0
-                });
+                    enemies.push({
+                        x,
+                        y,
+                        id: 'boss' + eventNumber + '_' + b + '_' + (enemyIdSeq++),
+                        spriteScale: 1.2, // Larger than normal bosses
+                        hurtTimer: 0,
+                        dead: false,
+                        deadTimer: 0,
+                        radius: 45, // Bigger radius
+                        health: finalHealth,
+                        maxHealth: finalHealth,
+                        damage: baseDamage * difficultyRamp,
+                        speed: bossSpeed,
+                        isBoss: true,
+                        isEventBoss: true, // Mark as special event boss
+                        eventNumber: eventNumber,
+                        behavior: 'chase',
+                        behaviorTimer: 0,
+                        circleAngle: Math.random() * Math.PI * 2,
+                        zigzagPhase: 0,
+                        facingRight: true,
+                        floatSpeed: 1.2 + Math.random() * 0.5,
+                        floatOffset: Math.random() * Math.PI * 2,
+                        wobbleSeed: Math.random() * 9999,
+                        dashCooldown: 4000,
+                        lastDash: 0,
+                        isDashing: false,
+                        dashSpeed: 350,
+                        dashDuration: 0.6,
+                        dashTimer: 0,
+                        dashDirX: 0,
+                        dashDirY: 0,
+                        fireballCooldown: 2000, // Faster fireball attacks
+                        lastFireball: 0
+                    });
+                }
             } catch (error) {
                 console.error("Spawn boss error:", error);
             }
@@ -3928,30 +4359,47 @@
 
         // Boss Event 1: Spiral Fireballs (4 min remaining)
         function spawnSpiralFireballs() {
+            // Final boss pattern: reduced fireballs to prevent lag
+            if (window._spiralFireballInterval) {
+                clearInterval(window._spiralFireballInterval);
+                window._spiralFireballInterval = null;
+            }
+
             let angle = 0;
-            const spiralCount = 40;
-            const spiralInterval = setInterval(() => {
-                if (gameState.screen !== 'playing') {
-                    clearInterval(spiralInterval);
+            let wavesRemaining = 20; // Reduced from 40 to prevent freeze
+            const FIREBALLS_PER_WAVE = 6; // Reduced from 10 to prevent lag
+            const SPAWN_RADIUS = 420;
+            const SPEED = 150;
+            const MAX_BOSS_FIREBALLS = 100; // Reduced from 260
+
+            window._spiralFireballInterval = setInterval(() => {
+                if (gameState.screen !== 'playing' || !player || player.dead) {
+                    clearInterval(window._spiralFireballInterval);
+                    window._spiralFireballInterval = null;
                     return;
                 }
 
-                if (gameState.screen !== 'playing' || spiralCount <= 0) {
-                    clearInterval(spiralInterval);
+                if (wavesRemaining-- <= 0) {
+                    clearInterval(window._spiralFireballInterval);
+                    window._spiralFireballInterval = null;
                     return;
                 }
 
-                for (let i = 0; i < 3; i++) {
-                    const offsetAngle = angle + (Math.PI * 2 / 3) * i;
-                    const distance = 400;
-                    const x = player.x + Math.cos(offsetAngle) * distance;
-                    const y = player.y + Math.sin(offsetAngle) * distance;
+                // Cap list size to avoid frame drops if multiple patterns overlap
+                if (bossFireballs.length > MAX_BOSS_FIREBALLS) {
+                    bossFireballs.splice(0, bossFireballs.length - MAX_BOSS_FIREBALLS);
+                }
+
+                for (let i = 0; i < FIREBALLS_PER_WAVE; i++) {
+                    const offsetAngle = angle + (Math.PI * 2 / FIREBALLS_PER_WAVE) * i;
+                    const x = player.x + Math.cos(offsetAngle) * SPAWN_RADIUS;
+                    const y = player.y + Math.sin(offsetAngle) * SPAWN_RADIUS;
 
                     bossFireballs.push({
                         x: x,
                         y: y,
-                        vx: -Math.cos(offsetAngle) * 150,
-                        vy: -Math.sin(offsetAngle) * 150,
+                        vx: -Math.cos(offsetAngle) * SPEED,
+                        vy: -Math.sin(offsetAngle) * SPEED,
                         radius: 15,
                         damage: 15,
                         lifetime: 5
@@ -3959,7 +4407,7 @@
                 }
 
                 angle += 0.3;
-            }, 200);
+            }, 250); // Slightly slower interval (was 200ms)
         }
 
         // Boss Event 2: Cross Fireballs (3 min remaining)
@@ -4003,13 +4451,30 @@
         }
 
         // Boss Event 3: Wave Fireballs (2 min remaining)
+
         function spawnWaveFireballs() {
+            // TSUNAMI DEMON pattern: 4 directional waves. Guard against stacked intervals.
+            if (window._waveFireballInterval) {
+                clearInterval(window._waveFireballInterval);
+                window._waveFireballInterval = null;
+            }
+
+            if (gameState.screen !== 'playing' || !player) return;
+
             let waveCount = 0;
             const maxWaves = 8;
-            const waveInterval = setInterval(() => {
-                if (gameState.screen !== 'playing' || waveCount >= maxWaves) {
-                    clearInterval(waveInterval);
+            const MAX_BOSS_FIREBALLS = 200;
+
+            window._waveFireballInterval = setInterval(() => {
+                if (gameState.screen !== 'playing' || !player || waveCount >= maxWaves) {
+                    clearInterval(window._waveFireballInterval);
+                    window._waveFireballInterval = null;
                     return;
+                }
+
+                // Cap list size to avoid frame drops if multiple patterns overlap
+                if (bossFireballs.length > MAX_BOSS_FIREBALLS) {
+                    bossFireballs.splice(0, bossFireballs.length - MAX_BOSS_FIREBALLS);
                 }
 
                 const side = waveCount % 4; // 0=top, 1=right, 2=bottom, 3=left
@@ -4038,6 +4503,8 @@
                         vx = 160;
                         vy = 0;
                     }
+
+                    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
 
                     bossFireballs.push({
                         x: x,
@@ -4206,14 +4673,11 @@
             }
 
 
-            // Check ultimate cooldown
-            if (now - player.lastUltimate > 60000 && !player.ultimateReady) {
+            // Check ultimate cooldown (30 seconds)
+            if (now - player.lastUltimate > 30000 && !player.ultimateReady) {
                 player.ultimateReady = true;
-            }
-
-            // Auto-cast ultimate
-            if (player.ultimateReady && !player.dead) {
-                castUltimate();
+                // Show ultimate ready toast
+                showToastNotification('⚡ ULTIMATE READY! ⚡', '#ffaa00');
             }
 
             // Update ultimate indicator
@@ -4429,45 +4893,78 @@
 
             // Draw lightning bolts (Chain Lightning)
             ctx.save();
-            for (let i = lightningBolts.length - 1; i >= 0; i--) {
-                const bolt = lightningBolts[i];
-                bolt.life--;
+            if (window.lightningBolts) {
+                for (let i = lightningBolts.length - 1; i >= 0; i--) {
+                    const bolt = lightningBolts[i];
+                    bolt.life--;
 
-                if (bolt.life <= 0) {
-                    lightningBolts.splice(i, 1);
-                    continue;
+                    if (bolt.life <= 0) {
+                        lightningBolts.splice(i, 1);
+                        continue;
+                    }
+
+                    const alpha = bolt.life / bolt.maxLife;
+
+                    // Check if bolt has points array (new chain lightning) or x1/y1/x2/y2 (old style)
+                    if (bolt.points && bolt.points.length > 0) {
+                        // New style: draw through points array
+                        ctx.strokeStyle = `rgba(100, 149, 237, ${alpha})`;
+                        ctx.shadowColor = 'rgba(173, 216, 230, 0.8)';
+                        ctx.shadowBlur = 12;
+                        ctx.lineWidth = 3;
+
+                        ctx.beginPath();
+                        ctx.moveTo(bolt.points[0].x, bolt.points[0].y);
+                        for (let p = 1; p < bolt.points.length; p++) {
+                            ctx.lineTo(bolt.points[p].x, bolt.points[p].y);
+                        }
+                        ctx.stroke();
+
+                        // Thicker glow layer
+                        ctx.strokeStyle = `rgba(173, 216, 230, ${alpha * 0.5})`;
+                        ctx.lineWidth = 6;
+                        ctx.shadowBlur = 18;
+                        ctx.stroke();
+
+                        // Glow at end point
+                        const endPoint = bolt.points[bolt.points.length - 1];
+                        ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.8})`;
+                        ctx.shadowBlur = 20;
+                        ctx.beginPath();
+                        ctx.arc(endPoint.x, endPoint.y, 5, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else if (bolt.x1 !== undefined) {
+                        // Old style: zigzag between two points
+                        ctx.strokeStyle = `rgba(255, 255, 0, ${alpha})`;
+                        ctx.shadowColor = '#ffff00';
+                        ctx.shadowBlur = 15;
+                        ctx.lineWidth = 3;
+
+                        ctx.beginPath();
+                        ctx.moveTo(bolt.x1, bolt.y1);
+
+                        // Create zigzag effect
+                        const segments = 4;
+                        for (let s = 1; s < segments; s++) {
+                            const t = s / segments;
+                            const midX = bolt.x1 + (bolt.x2 - bolt.x1) * t;
+                            const midY = bolt.y1 + (bolt.y2 - bolt.y1) * t;
+                            const offsetX = (Math.random() - 0.5) * 30;
+                            const offsetY = (Math.random() - 0.5) * 30;
+                            ctx.lineTo(midX + offsetX, midY + offsetY);
+                        }
+
+                        ctx.lineTo(bolt.x2, bolt.y2);
+                        ctx.stroke();
+
+                        // Add glow points at ends
+                        ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.8})`;
+                        ctx.shadowBlur = 20;
+                        ctx.beginPath();
+                        ctx.arc(bolt.x2, bolt.y2, 4, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
                 }
-
-                // Draw zigzag lightning bolt
-                const alpha = bolt.life / bolt.maxLife;
-                ctx.strokeStyle = `rgba(255, 255, 0, ${alpha})`;
-                ctx.shadowColor = '#ffff00';
-                ctx.shadowBlur = 15;
-                ctx.lineWidth = 3;
-
-                ctx.beginPath();
-                ctx.moveTo(bolt.x1, bolt.y1);
-
-                // Create zigzag effect
-                const segments = 4;
-                for (let s = 1; s < segments; s++) {
-                    const t = s / segments;
-                    const midX = bolt.x1 + (bolt.x2 - bolt.x1) * t;
-                    const midY = bolt.y1 + (bolt.y2 - bolt.y1) * t;
-                    const offsetX = (Math.random() - 0.5) * 30;
-                    const offsetY = (Math.random() - 0.5) * 30;
-                    ctx.lineTo(midX + offsetX, midY + offsetY);
-                }
-
-                ctx.lineTo(bolt.x2, bolt.y2);
-                ctx.stroke();
-
-                // Add glow points at ends
-                ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.8})`;
-                ctx.shadowBlur = 20;
-                ctx.beginPath();
-                ctx.arc(bolt.x2, bolt.y2, 4, 0, Math.PI * 2);
-                ctx.fill();
             }
             ctx.restore();
 
@@ -4478,6 +4975,7 @@
 
                 // Timers
                 if (enemy.hurtTimer > 0) enemy.hurtTimer = Math.max(0, enemy.hurtTimer - dt);
+                if (enemy.frostFlash > 0) enemy.frostFlash = Math.max(0, enemy.frostFlash - dt);
 
                 // Floating animation (used for both canvas + DOM sprites)
                 const floatY = Math.sin(time * enemy.floatSpeed + enemy.floatOffset) * 5;
@@ -4510,6 +5008,10 @@
                     enemy.facingRight = dx > 0;
                 }
 
+                // Calculate enemy speed with slow effects
+                const slowMul = (enemy.slowUntil && now < enemy.slowUntil) ? (enemy.slowFactor || 0.7) : 1;
+                const eSpeed = enemy.speed * slowMul;
+
                 if (dist > enemy.radius + player.radius) {
                     // ENHANCED ENEMY BEHAVIORS
                     let moveX = 0, moveY = 0;
@@ -4521,8 +5023,8 @@
                             const perpX = -dy / dist;
                             const perpY = dx / dist;
                             const zigzagOffset = Math.sin(enemy.zigzagPhase) * 40;
-                            moveX = (dx / dist + perpX * zigzagOffset / 100) * enemy.speed * dt;
-                            moveY = (dy / dist + perpY * zigzagOffset / 100) * enemy.speed * dt;
+                            moveX = (dx / dist + perpX * zigzagOffset / 100) * eSpeed * dt;
+                            moveY = (dy / dist + perpY * zigzagOffset / 100) * eSpeed * dt;
                             break;
 
                         case 'circler':
@@ -4530,12 +5032,12 @@
                             const preferredDist = 180;
                             if (dist > preferredDist + 50) {
                                 // Move closer
-                                moveX = (dx / dist) * enemy.speed * dt;
-                                moveY = (dy / dist) * enemy.speed * dt;
+                                moveX = (dx / dist) * eSpeed * dt;
+                                moveY = (dy / dist) * eSpeed * dt;
                             } else if (dist < preferredDist - 50) {
                                 // Move away
-                                moveX = -(dx / dist) * enemy.speed * dt;
-                                moveY = -(dy / dist) * enemy.speed * dt;
+                                moveX = -(dx / dist) * eSpeed * dt;
+                                moveY = -(dy / dist) * eSpeed * dt;
                             } else {
                                 // Circle around
                                 enemy.circleAngle += dt * 1.5;
@@ -4545,8 +5047,8 @@
                                 const tdy = targetY - enemy.y;
                                 const tdist = Math.sqrt(tdx * tdx + tdy * tdy);
                                 if (tdist > 10) {
-                                    moveX = (tdx / tdist) * enemy.speed * dt;
-                                    moveY = (tdy / tdist) * enemy.speed * dt;
+                                    moveX = (tdx / tdist) * eSpeed * dt;
+                                    moveY = (tdy / tdist) * eSpeed * dt;
                                 }
                             }
                             break;
@@ -4572,8 +5074,8 @@
                             enemy.behaviorTimer += dt;
                             if (enemy.behaviorTimer < 2.0) {
                                 // Approach phase
-                                moveX = (dx / dist) * enemy.speed * dt;
-                                moveY = (dy / dist) * enemy.speed * dt;
+                                moveX = (dx / dist) * eSpeed * dt;
+                                moveY = (dy / dist) * eSpeed * dt;
                             } else if (enemy.behaviorTimer < 3.5) {
                                 // Retreat phase
                                 moveX = -(dx / dist) * enemy.speed * 0.8 * dt;
@@ -4584,13 +5086,22 @@
                             break;
 
                         case 'chain':
-                            beep({ freq: 900, dur: 0.05, type: 'square', gain: 0.12 });
-                            setTimeout(() => beep({ freq: 1200, dur: 0.04, type: 'square', gain: 0.10 }), 35);
-                            setTimeout(() => beep({ freq: 1500, dur: 0.03, type: 'square', gain: 0.08 }), 65);
+                            // Chain behavior - should have movement
+                            moveX = (dx / dist) * eSpeed * dt;
+                            moveY = (dy / dist) * eSpeed * dt;
+                            // Only beep occasionally, not every frame
+                            if (!enemy.lastBeep || now - enemy.lastBeep > 500) {
+                                enemy.lastBeep = now;
+                                try {
+                                    beep({ freq: 900, dur: 0.05, type: 'square', gain: 0.12 });
+                                    setTimeout(() => beep({ freq: 1200, dur: 0.04, type: 'square', gain: 0.10 }), 35);
+                                    setTimeout(() => beep({ freq: 1500, dur: 0.03, type: 'square', gain: 0.08 }), 65);
+                                } catch (e) { }
+                            }
                             break;
                         default: // 'chase' - normal behavior
-                            moveX = (dx / dist) * enemy.speed * dt;
-                            moveY = (dy / dist) * enemy.speed * dt;
+                            moveX = (dx / dist) * eSpeed * dt;
+                            moveY = (dy / dist) * eSpeed * dt;
                             break;
                     }
 
@@ -4731,6 +5242,11 @@
             }
 
             // Update and draw projectiles
+            if (projectiles.length > 650) projectiles.splice(0, projectiles.length - 650);
+            if (bossFireballs.length > 320) bossFireballs.splice(0, bossFireballs.length - 320);
+            if (xpOrbs.length > 420) xpOrbs.splice(0, xpOrbs.length - 420);
+            if (enemies.length > 520) enemies.splice(0, enemies.length - 520);
+
             for (let i = projectiles.length - 1; i >= 0; i--) {
                 const proj = projectiles[i];
 
@@ -4746,7 +5262,10 @@
 
                 // Check collision with enemies
                 let hit = false;
-                enemies.forEach(enemy => {
+                for (let ei = 0; ei < enemies.length; ei++) {
+                    const enemy = enemies[ei];
+                    if (!enemy || enemy.dead) continue;
+
                     const dx = enemy.x - proj.x;
                     const dy = enemy.y - proj.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -4761,46 +5280,146 @@
 
                         enemy.health -= damage;
 
-                        // Explosive strikes - create explosion effect and splash damage
-                        if (player.upgrades.includes('explosion') && Math.random() < 0.15) {
-                            try { playSfx('explosion'); } catch (e) { }
-                            explosionEffects.push({
-                                x: enemy.x,
-                                y: enemy.y,
-                                radius: 0,
-                                maxRadius: 60,
-                                lifetime: 0.4,
-                                age: 0
-                            });
+                        // Frost Touch: slow + blue aura on hit (reduced on bosses)
+                        if (player.upgrades.includes('frost')) {
+                            enemy.slowUntil = performance.now() + 2000;
+                            enemy.slowFactor = 0.7; // 30% slow
+                            enemy.frostFlash = 0.25;
+                            // Skip visual effects on bosses to prevent lag
+                            if (!enemy.isBoss) {
+                                frostHitEffects.push({ x: enemy.x, y: enemy.y, age: 0, lifetime: 0.35, r: enemy.radius + 10 });
+                                if (frostHitEffects.length > 120) frostHitEffects.splice(0, frostHitEffects.length - 120);
+                            }
+                        }
 
-                            // Splash damage to nearby enemies
-                            enemies.forEach(nearbyEnemy => {
-                                if (nearbyEnemy === enemy) return;
+                        // Burning Rage: burn enemies over time with fire particles
+                        if (player.upgrades.includes('burn')) {
+                            enemy.burning = true;
+                            enemy.burnEndTime = performance.now() + 3000; // 3 seconds
+                            enemy.burnDamage = damage * 0.3; // 30% of hit damage per tick
+                            enemy.lastBurnTick = performance.now();
+
+                            // Create initial burst of fire particles
+                            for (let f = 0; f < 5; f++) {
+                                burnEffects.push({
+                                    x: enemy.x + (Math.random() - 0.5) * enemy.radius,
+                                    y: enemy.y + (Math.random() - 0.5) * enemy.radius,
+                                    vx: (Math.random() - 0.5) * 2,
+                                    vy: -Math.random() * 3,
+                                    life: 25,
+                                    maxLife: 25,
+                                    size: 3 + Math.random() * 3,
+                                    color: Math.random() < 0.5 ? '#ff4400' : '#ff6600'
+                                });
+                            }
+                            if (burnEffects.length > 200) burnEffects.splice(0, burnEffects.length - 200);
+                        }
+
+                        // Chain Lightning: jump to nearby enemies with visual effects
+                        if (player.upgrades.includes('chain')) {
+                            const chainRange = 120;
+                            const chainDamage = damage * 0.5;
+                            const maxChains = 3;
+                            const chainedEnemies = new Set([enemy]);
+                            let currentTargets = [enemy];
+
+                            for (let chain = 0; chain < maxChains; chain++) {
+                                const nextTargets = [];
+
+                                currentTargets.forEach(currentEnemy => {
+                                    for (let ci = 0; ci < enemies.length && nextTargets.length < 2; ci++) {
+                                        const nextEnemy = enemies[ci];
+                                        if (!nextEnemy || nextEnemy.dead || chainedEnemies.has(nextEnemy)) continue;
+
+                                        const dx = nextEnemy.x - currentEnemy.x;
+                                        const dy = nextEnemy.y - currentEnemy.y;
+                                        const dist = Math.sqrt(dx * dx + dy * dy);
+
+                                        if (dist < chainRange) {
+                                            chainedEnemies.add(nextEnemy);
+                                            nextTargets.push(nextEnemy);
+
+                                            // Apply damage
+                                            nextEnemy.health -= chainDamage;
+                                            nextEnemy.hurtTimer = 0.15;
+                                            if (nextEnemy.health <= 0) {
+                                                markEnemyDead(nextEnemy);
+                                            }
+
+                                            // Create lightning bolt effect
+                                            if (!window.lightningBolts) window.lightningBolts = [];
+                                            const boltPoints = [];
+                                            const segments = 6;
+                                            for (let s = 0; s <= segments; s++) {
+                                                const t = s / segments;
+                                                const lx = currentEnemy.x + dx * t + (Math.random() - 0.5) * 20;
+                                                const ly = currentEnemy.y + dy * t + (Math.random() - 0.5) * 20;
+                                                boltPoints.push({ x: lx, y: ly });
+                                            }
+
+                                            window.lightningBolts.push({
+                                                points: boltPoints,
+                                                life: 15,
+                                                maxLife: 15
+                                            });
+                                        }
+                                    }
+                                });
+
+                                if (nextTargets.length === 0) break;
+                                currentTargets = nextTargets;
+                            }
+                        }
+
+                        // Explosive strikes - create explosion effect and splash damage (reduced on bosses)
+                        if (player.upgrades.includes('explosion') && Math.random() < 0.15) {
+                            // Skip explosion effects on bosses to prevent lag
+                            if (!enemy.isBoss) {
+                                try { playSfx('explosion'); } catch (e) { }
+                                explosionEffects.push({
+                                    x: enemy.x,
+                                    y: enemy.y,
+                                    radius: 0,
+                                    maxRadius: 60,
+                                    lifetime: 0.4,
+                                    age: 0
+                                });
+                            }
+
+                            // Splash damage to nearby enemies (capped to reduce lag, reduced on bosses)
+                            const splashR = 60;
+                            let splashHits = 0;
+                            const splashMax = enemy.isBoss ? 5 : 15; // Reduce splash hits on bosses
+                            for (let sj = 0; sj < enemies.length && splashHits < splashMax; sj++) {
+                                const nearbyEnemy = enemies[sj];
+                                if (!nearbyEnemy || nearbyEnemy === enemy || nearbyEnemy.dead) continue;
                                 const dx2 = nearbyEnemy.x - enemy.x;
                                 const dy2 = nearbyEnemy.y - enemy.y;
+                                if (Math.abs(dx2) > splashR || Math.abs(dy2) > splashR) continue;
                                 const dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
-
-                                if (dist2 < 60) {
+                                if (dist2 < splashR) {
                                     nearbyEnemy.health -= damage * 0.5;
                                     nearbyEnemy.hurtTimer = 0.18;
                                     if (nearbyEnemy.health <= 0) {
                                         markEnemyDead(nearbyEnemy);
                                     }
+                                    splashHits++;
                                 }
-                            });
+                            }
                         }
-
 
                         enemy.hurtTimer = 0.18;
                         if (enemy.health <= 0) {
                             markEnemyDead(enemy);
                         }
 
+                        // Stop at first hit unless piercing is enabled
                         if (!proj.pierce) {
                             hit = true;
+                            break;
                         }
                     }
-                });
+                }
 
                 if (hit) {
                     projectiles.splice(i, 1);
@@ -5033,6 +5652,60 @@
 
                 ctx.restore();
             }
+
+            // Update and draw frost hit aura effects
+            for (let i = frostHitEffects.length - 1; i >= 0; i--) {
+                const fx = frostHitEffects[i];
+                fx.age += dt;
+                if (fx.age >= fx.lifetime) { frostHitEffects.splice(i, 1); continue; }
+                const t = fx.age / fx.lifetime;
+                const alpha = (1 - t) * 0.55;
+                const rad = fx.r * (0.6 + t * 0.8);
+                ctx.save();
+                ctx.translate(fx.x, fx.y);
+                ctx.strokeStyle = `rgba(100, 180, 255, ${alpha})`;
+                ctx.lineWidth = 10 * (1 - t * 0.6);
+                ctx.shadowBlur = 18;
+                ctx.shadowColor = 'rgba(120, 200, 255, 0.9)';
+                ctx.beginPath();
+                ctx.arc(0, 0, rad, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // Draw burning aura on burning enemies
+            ctx.save();
+            enemies.forEach(enemy => {
+                if (enemy.burning && now < enemy.burnEndTime && !enemy.dead) {
+                    const burnProgress = (enemy.burnEndTime - now) / 3000;
+                    const pulseSize = Math.sin(now / 100) * 3;
+
+                    // Orange/red glow around burning enemies
+                    ctx.translate(enemy.x, enemy.y);
+
+                    // Outer glow
+                    const grad = ctx.createRadialGradient(0, 0, enemy.radius, 0, 0, enemy.radius + 15 + pulseSize);
+                    grad.addColorStop(0, 'rgba(255, 100, 0, 0)');
+                    grad.addColorStop(0.5, `rgba(255, 80, 0, ${burnProgress * 0.3})`);
+                    grad.addColorStop(1, 'rgba(255, 50, 0, 0)');
+                    ctx.fillStyle = grad;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, enemy.radius + 15 + pulseSize, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Inner flame ring
+                    ctx.strokeStyle = `rgba(255, 120, 0, ${burnProgress * 0.6})`;
+                    ctx.lineWidth = 2;
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = 'rgba(255, 100, 0, 0.8)';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, enemy.radius + 5, 0, Math.PI * 2);
+                    ctx.stroke();
+
+                    ctx.translate(-enemy.x, -enemy.y);
+                }
+            });
+            ctx.restore();
 
             // Update and draw explosion effects
             for (let i = explosionEffects.length - 1; i >= 0; i--) {
@@ -5474,6 +6147,15 @@
             document.getElementById('finalKills').textContent = player.kills;
             document.getElementById('finalLevel').textContent = player.level;
             document.getElementById('bonesEarned').textContent = bonesEarned;
+
+            // Initialize keyboard navigation - highlight first button
+            window.gameOverIndex = 0;
+            setTimeout(() => {
+                const buttons = document.querySelectorAll('#gameOverScreen .menu-btn');
+                if (buttons.length > 0) {
+                    highlightButton(buttons, 0);
+                }
+            }, 100);
         }
 
         function victory() {
@@ -5498,6 +6180,15 @@
             document.getElementById('victoryKills').textContent = player.kills;
             document.getElementById('victoryLevel').textContent = player.level;
             document.getElementById('victoryBones').textContent = bonesEarned;
+
+            // Initialize keyboard navigation - highlight first button
+            window.victoryIndex = 0;
+            setTimeout(() => {
+                const buttons = document.querySelectorAll('#victoryScreen .menu-btn');
+                if (buttons.length > 0) {
+                    highlightButton(buttons, 0);
+                }
+            }, 100);
         }
 
         function restartGame() {
@@ -6142,6 +6833,35 @@
                 checkOrientation();
             }
         })();
+
+        // Initialize menu navigation on page load
+        function initializeMenuNavigation() {
+            // Highlight first menu button on load
+            window.mainMenuIndex = 0;
+            const menuButtons = document.querySelectorAll('#mainMenu .menu-btn');
+            if (menuButtons.length > 0) {
+                const mainMenu = document.getElementById('mainMenu');
+                const isVisible = mainMenu && (mainMenu.style.display === '' || mainMenu.style.display === 'flex' || mainMenu.style.display === 'block');
+                if (isVisible) {
+                    highlightButton(menuButtons, 0);
+                }
+            }
+        }
+
+        // Try multiple initialization methods to ensure it works
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                setTimeout(initializeMenuNavigation, 100);
+            });
+        } else {
+            // DOM already loaded
+            setTimeout(initializeMenuNavigation, 100);
+        }
+
+        // Also try on window load as backup
+        window.addEventListener('load', () => {
+            setTimeout(initializeMenuNavigation, 100);
+        });
     </script>
 
 </body>
