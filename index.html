@@ -2650,6 +2650,8 @@
 
         // XP Orbs
         const xpOrbs = [];
+        const lightningBolts = []; // Chain lightning visual effects
+        const burnEffects = []; // Burning rage visual effects
 
         // Game timer
         let gameTimer = 300; // 5 minutes in seconds
@@ -4368,6 +4370,107 @@
                 }, 3000);
             }
 
+
+
+            // Update and draw burn effects
+            ctx.save();
+            for (let i = burnEffects.length - 1; i >= 0; i--) {
+                const burn = burnEffects[i];
+                burn.x += burn.vx;
+                burn.y += burn.vy;
+                burn.vy -= 0.08; // Rise up
+                burn.life--;
+
+                if (burn.life <= 0) {
+                    burnEffects.splice(i, 1);
+                    continue;
+                }
+
+                const alpha = burn.life / burn.maxLife;
+                ctx.fillStyle = burn.color.replace(')', `, ${alpha})`).replace('rgb', 'rgba');
+                ctx.shadowColor = burn.color;
+                ctx.shadowBlur = 8;
+
+                ctx.beginPath();
+                ctx.arc(burn.x, burn.y, burn.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+
+            // Apply burn damage over time
+            enemies.forEach(e => {
+                if (e.burning && now < e.burnEndTime) {
+                    // Tick damage every 0.5 seconds
+                    if (now - e.lastBurnTick > 500) {
+                        e.health -= e.burnDamage;
+                        e.hurtTimer = 0.15;
+                        e.lastBurnTick = now;
+
+                        // Spawn fire particle
+                        burnEffects.push({
+                            x: e.x + (Math.random() - 0.5) * e.radius,
+                            y: e.y + (Math.random() - 0.5) * e.radius,
+                            vx: (Math.random() - 0.5),
+                            vy: -Math.random() * 2,
+                            life: 20,
+                            maxLife: 20,
+                            size: 2 + Math.random() * 2,
+                            color: Math.random() < 0.5 ? '#ff4400' : '#ff6600'
+                        });
+
+                        if (e.health <= 0) {
+                            markEnemyDead(e);
+                        }
+                    }
+                } else if (e.burning) {
+                    e.burning = false;
+                }
+            });
+
+            // Draw lightning bolts (Chain Lightning)
+            ctx.save();
+            for (let i = lightningBolts.length - 1; i >= 0; i--) {
+                const bolt = lightningBolts[i];
+                bolt.life--;
+
+                if (bolt.life <= 0) {
+                    lightningBolts.splice(i, 1);
+                    continue;
+                }
+
+                // Draw zigzag lightning bolt
+                const alpha = bolt.life / bolt.maxLife;
+                ctx.strokeStyle = `rgba(255, 255, 0, ${alpha})`;
+                ctx.shadowColor = '#ffff00';
+                ctx.shadowBlur = 15;
+                ctx.lineWidth = 3;
+
+                ctx.beginPath();
+                ctx.moveTo(bolt.x1, bolt.y1);
+
+                // Create zigzag effect
+                const segments = 4;
+                for (let s = 1; s < segments; s++) {
+                    const t = s / segments;
+                    const midX = bolt.x1 + (bolt.x2 - bolt.x1) * t;
+                    const midY = bolt.y1 + (bolt.y2 - bolt.y1) * t;
+                    const offsetX = (Math.random() - 0.5) * 30;
+                    const offsetY = (Math.random() - 0.5) * 30;
+                    ctx.lineTo(midX + offsetX, midY + offsetY);
+                }
+
+                ctx.lineTo(bolt.x2, bolt.y2);
+                ctx.stroke();
+
+                // Add glow points at ends
+                ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.8})`;
+                ctx.shadowBlur = 20;
+                ctx.beginPath();
+                ctx.arc(bolt.x2, bolt.y2, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+
             // Update and draw enemies
             const time = Date.now() / 1000;
             for (let ei = enemies.length - 1; ei >= 0; ei--) {
@@ -4480,6 +4583,11 @@
                             }
                             break;
 
+                        case 'chain':
+                            beep({ freq: 900, dur: 0.05, type: 'square', gain: 0.12 });
+                            setTimeout(() => beep({ freq: 1200, dur: 0.04, type: 'square', gain: 0.10 }), 35);
+                            setTimeout(() => beep({ freq: 1500, dur: 0.03, type: 'square', gain: 0.08 }), 65);
+                            break;
                         default: // 'chase' - normal behavior
                             moveX = (dx / dist) * enemy.speed * dt;
                             moveY = (dy / dist) * enemy.speed * dt;
@@ -5082,15 +5190,46 @@
                     continue;
                 }
 
-                // Draw orb
-                ctx.fillStyle = '#00d4ff';
+                // Draw bone-shaped orb
+                ctx.save();
+                ctx.translate(orb.x, orb.y);
+
+                // Add rotation for visual interest
+                if (!orb.rotation) orb.rotation = Math.random() * Math.PI * 2;
+                orb.rotation += 0.02;
+                ctx.rotate(orb.rotation);
+
+                // Bone color - off-white/cream
+                ctx.fillStyle = '#f5deb3';
+                ctx.strokeStyle = '#d2b48c';
+                ctx.lineWidth = 1.5;
+
+                const boneW = orb.radius * 2;
+                const boneH = orb.radius * 0.8;
+
+                // Left bulb
                 ctx.beginPath();
-                ctx.arc(orb.x, orb.y, orb.radius, 0, Math.PI * 2);
+                ctx.arc(-boneW * 0.4, 0, boneH * 0.8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // Right bulb
+                ctx.beginPath();
+                ctx.arc(boneW * 0.4, 0, boneH * 0.8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // Center bar
+                ctx.fillRect(-boneW * 0.4, -boneH * 0.5, boneW * 0.8, boneH);
+                ctx.strokeRect(-boneW * 0.4, -boneH * 0.5, boneW * 0.8, boneH);
+
+                // Add shine/highlight
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+                ctx.beginPath();
+                ctx.arc(-boneW * 0.25, -boneH * 0.2, boneH * 0.3, 0, Math.PI * 2);
                 ctx.fill();
 
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 2;
-                ctx.stroke();
+                ctx.restore();
             }
 
             // Draw vampiric aura if player has the upgrade
@@ -5631,6 +5770,10 @@
                         // Warning sound for horde
                         beep({ freq: 900, dur: 0.10, type: 'square', gain: 0.14, slideTo: 750 });
                         setTimeout(() => beep({ freq: 900, dur: 0.10, type: 'square', gain: 0.14, slideTo: 750 }), 200);
+                        break;
+                    case 'chain':
+                        beep({ freq: 800, dur: 0.06, type: 'square', gain: 0.12, slideTo: 1200 });
+                        setTimeout(() => beep({ freq: 1200, dur: 0.04, type: 'square', gain: 0.10, slideTo: 1600 }), 40);
                         break;
                     default: beep({ freq: 440, dur: 0.06, type: 'square', gain: 0.10 }); break;
                 }
