@@ -715,6 +715,97 @@
             }
         }
 
+        /* Final Boss Health Bar */
+        #bossBossBar {
+            display: none;
+            position: fixed;
+            top: 18px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 520px;
+            max-width: 90vw;
+            z-index: 9998;
+            pointer-events: none;
+        }
+
+        #bossBossBar .boss-bar-title {
+            font-family: 'Bebas Neue', cursive;
+            font-size: 1.1rem;
+            color: #ff4444;
+            text-align: center;
+            letter-spacing: 0.2rem;
+            margin-bottom: 4px;
+            text-shadow: 0 0 8px rgba(255, 60, 60, 0.7);
+        }
+
+        #bossBossBar .boss-bar-outer {
+            width: 100%;
+            height: 28px;
+            background: #111;
+            border: 2px solid #8B0000;
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: 0 0 12px rgba(180, 0, 0, 0.5), inset 0 2px 4px rgba(0, 0, 0, 0.6);
+            position: relative;
+        }
+
+        #bossBossBar .boss-bar-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #6b0000 0%, #cc2200 40%, #ff4400 70%, #ff6622 100%);
+            transition: width 0.25s linear;
+            box-shadow: inset 0 0 14px rgba(255, 100, 50, 0.4);
+        }
+
+        #bossBossBar .boss-bar-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Bebas Neue', cursive;
+            font-size: 1rem;
+            color: #fff;
+            text-shadow: 0 0 6px #000, 0 0 3px #000;
+            letter-spacing: 0.15rem;
+            white-space: nowrap;
+        }
+
+        /* Individual warlord pips */
+        #bossBossBar .boss-pips {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 5px;
+        }
+
+        #bossBossBar .boss-pip {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 2px solid #8B0000;
+            background: #cc2200;
+            box-shadow: 0 0 6px rgba(200, 30, 0, 0.6);
+            transition: background 0.3s, box-shadow 0.3s;
+        }
+
+        #bossBossBar .boss-pip.dead {
+            background: #333;
+            border-color: #444;
+            box-shadow: none;
+        }
+
+        @keyframes bossBarPulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 12px rgba(180, 0, 0, 0.5), inset 0 2px 4px rgba(0, 0, 0, 0.6);
+            }
+
+            50% {
+                box-shadow: 0 0 22px rgba(220, 40, 0, 0.7), inset 0 2px 4px rgba(0, 0, 0, 0.6);
+            }
+        }
+
         /* Responsive */
 
         /* Stats Panel */
@@ -1869,6 +1960,22 @@
         </div>
     </div>
 
+    <!-- Final Boss Health Bar (visible only during final boss phase) -->
+    <div id="bossBossBar">
+        <div class="boss-bar-title">🔥 DEMON WARLORDS 🔥</div>
+        <div class="boss-bar-outer">
+            <div class="boss-bar-fill" id="bossFill"></div>
+            <div class="boss-bar-text" id="bossBarText">100,000 / 100,000</div>
+        </div>
+        <div class="boss-pips">
+            <div class="boss-pip" id="bossPip0"></div>
+            <div class="boss-pip" id="bossPip1"></div>
+            <div class="boss-pip" id="bossPip2"></div>
+            <div class="boss-pip" id="bossPip3"></div>
+            <div class="boss-pip" id="bossPip4"></div>
+        </div>
+    </div>
+
     <!-- Level Up Screen -->
     <div id="levelUpScreen">
         <div class="levelup-container">
@@ -1933,10 +2040,10 @@
         const MAP_H = 140;
 
         // Tile indices (linear index into atlas). Tweak these to make the map look good.
-        let FLOOR_TILE = 0;           // main ground tile index
-        let FLOOR_VARIANTS = [0, 0, 0, 0, 1, 2, 3]; // weighted variants (edit as you like)
-        let WALL_TILE = 1;            // border/wall tile index
-        let DECOR_TILES = [4, 5, 6, 7]; // occasional decor tiles
+        let FLOOR_TILE = 6;         // main ground tile index
+        let FLOOR_VARIANTS = [6, 6, 6, 7, 7, 5, 5];// weighted variants (edit as you like)
+        let WALL_TILE = 1;                   // border/wall tile index
+        let DECOR_TILES = [9, 10];   // occasional decor tiles
 
         // Procedural map generator (visual only; no collision yet)
         function regenMap(seed = Math.random() * 999999) {
@@ -1978,8 +2085,8 @@
             const alt3 = uniqVariants[3] ?? alt2;
 
             // Style knobs
-            const PATCH_SIZE = 14;      // 10–18 feels good
-            const DECOR_RATE = 0.012;   // 1.2% decor density
+            const PATCH_SIZE = 32;      // 10–18 feels good
+            const DECOR_RATE = 0.008;   // 1.2% decor density
             for (let y = 0; y < MAP_H; y++) {
                 for (let x = 0; x < MAP_W; x++) {
                     // solid border
@@ -2969,6 +3076,7 @@
         // BOSS EVENT STABILITY (prevents freeze by pausing spawns and clearing mobs)
         let bossLockdownUntil = 0;      // perf.now() timestamp; during this window only bosses remain
         let finalBossActive = false;    // final boss phase: no normal spawns until timer ends
+        let finalBossSpawned = false;   // true only AFTER the 5 warlords actually exist in the enemies array
         const finalBossIds = new Set(); // track final bosses (optional)
 
         function inBossLockdown() {
@@ -3014,10 +3122,13 @@
             if (finalBossActive) {
                 // Final boss: keep arena clear of normal mobs for the rest of the timer
                 purgeNonBossEnemies();
-                // If player somehow killed all final bosses early, allow normal flow (or you can trigger victory early)
+                // Don't check for victory until the warlords have actually spawned
+                if (!finalBossSpawned) return;
+                // If player killed all final bosses, trigger victory
                 const aliveFinal = enemies.some(e => e && e.isBoss && e.isFinalBoss && !e.dead);
                 if (!aliveFinal) {
                     finalBossActive = false;
+                    finalBossSpawned = false;
                     // Trigger victory when final boss is defeated
                     victory();
                     bossLockdownUntil = 0;
@@ -3119,11 +3230,11 @@
                 }
             },
             { name: 'Extended Range', description: '+30% Attack Range', apply: (p) => { p.attackRange *= 1.3; } },
-            { name: 'Life Steal', description: 'Heal 2 HP per kill', apply: (p) => { p.upgrades.push('lifesteal'); } },
+            { name: 'Life Steal', description: 'Heal +2 HP per kill (stacks)', apply: (p) => { p.lifestealAmt = (p.lifestealAmt || 0) + 2; if (!p.upgrades.includes('lifesteal')) p.upgrades.push('lifesteal'); } },
             { name: 'Double Shot', description: 'Fire +1 projectile (stacks)', apply: (p) => { p.upgrades.push('doubleshot'); } },
             { name: 'Piercing', description: 'Attacks pierce enemies (unique)', unique: true, apply: (p) => { if (!p.upgrades.includes('pierce')) p.upgrades.push('pierce'); } },
-            { name: 'Critical Strike', description: '20% chance for 2x damage', apply: (p) => { p.upgrades.push('crit'); } },
-            { name: 'Regeneration', description: 'Heal 1 HP per second', apply: (p) => { p.upgrades.push('regen'); } },
+            { name: 'Critical Strike', description: '+20% Critical Chance (stacks)', apply: (p) => { p.critChance = (p.critChance || 0) + 0.20; if (!p.upgrades.includes('crit')) p.upgrades.push('crit'); } },
+            { name: 'Regeneration', description: 'Heal +1 HP/sec (stacks)', apply: (p) => { p.regenRate = (p.regenRate || 0) + 1; if (!p.upgrades.includes('regen')) p.upgrades.push('regen'); } },
             {
                 name: 'Bone Boomerang',
                 description: 'Orbiting bones deal damage',
@@ -3144,7 +3255,7 @@
                     if (!p.upgrades.includes('vampire')) p.upgrades.push('vampire');
                 }
             },
-            { name: 'Explosive Strikes', description: 'Attacks have 15% splash damage', apply: (p) => { p.upgrades.push('explosion'); } },
+            { name: 'Explosive Strikes', description: '+10% Splash Chance (stacks)', apply: (p) => { p.explosionChance = (p.explosionChance || 0) + 0.10; if (!p.upgrades.includes('explosion')) p.upgrades.push('explosion'); } },
             { name: 'Ghost Shield', description: 'Absorb next 20 damage', apply: (p) => { p.shield = (p.shield || 0) + 20; } },
             { name: 'Rapid Fire', description: '+30% Attack Speed', apply: (p) => { p.attackSpeed *= 0.7; } },
             { name: 'Berserker', description: '+10 Damage, -10 Max HP', apply: (p) => { p.damage += 10; p.maxHealth -= 10; p.health = Math.min(p.health, p.maxHealth); p.berserker = true; p.upgrades.push('berserker'); } },
@@ -3156,11 +3267,11 @@
                 }
             },
             // NEW UPGRADES AND PASSIVES
-            { name: 'Thorns', description: 'Reflect 25% damage to attackers', apply: (p) => { p.upgrades.push('thorns'); } },
-            { name: 'Dodge Master', description: '15% chance to dodge attacks', apply: (p) => { p.upgrades.push('dodge'); } },
-            { name: 'Burning Rage', description: 'Attacks burn enemies for 3s', apply: (p) => { p.upgrades.push('burn'); } },
-            { name: 'Frost Touch', description: 'Slow enemies by 30% for 2s', apply: (p) => { p.upgrades.push('frost'); p.frostTouch = true; } },
-            { name: 'Chain Lightning', description: 'Attacks jump to nearby foes', apply: (p) => { p.upgrades.push('chain'); } },
+            { name: 'Thorns', description: 'Reflect +25% damage to attackers (stacks)', apply: (p) => { p.thornsReflect = (p.thornsReflect || 0) + 0.25; if (!p.upgrades.includes('thorns')) p.upgrades.push('thorns'); } },
+            { name: 'Dodge Master', description: '+15% Dodge Chance (stacks)', apply: (p) => { p.dodgeChance = (p.dodgeChance || 0) + 0.15; if (!p.upgrades.includes('dodge')) p.upgrades.push('dodge'); } },
+            { name: 'Burning Rage', description: 'Burn enemies +1s longer (stacks)', apply: (p) => { p.burnDuration = (p.burnDuration || 3) + 1; if (!p.upgrades.includes('burn')) p.upgrades.push('burn'); } },
+            { name: 'Frost Touch', description: 'Slow enemies +0.5s longer (stacks)', apply: (p) => { p.frostDuration = (p.frostDuration || 2) + 0.5; p.frostTouch = true; if (!p.upgrades.includes('frost')) p.upgrades.push('frost'); } },
+            { name: 'Chain Lightning', description: 'Attacks jump +1 more enemy (stacks)', apply: (p) => { p.chainJumps = (p.chainJumps || 3) + 1; if (!p.upgrades.includes('chain')) p.upgrades.push('chain'); } },
             { name: 'Fortified', description: '+15% Damage Reduction', apply: (p) => { p.damageReduction = (p.damageReduction || 0) + 0.15; } },
             { name: 'Lucky Strike', description: '+10% Critical Chance', apply: (p) => { p.critBonus = (p.critBonus || 0) + 0.1; } },
             { name: 'XP Magnet', description: '+50% XP pickup range', apply: (p) => { p.magnetRange = (p.magnetRange || 1) * 1.5; } },
@@ -3314,11 +3425,23 @@
                     localStorage.removeItem('barkCurrency');
                     localStorage.removeItem('barkUnlocked');
                     localStorage.removeItem('barkPermanent');
+                    localStorage.removeItem('bark_achievements');
+                    localStorage.removeItem('bark_boss_kills');
+                    localStorage.removeItem('bark_total_bones_earned');
 
                     // Reset gameState
                     gameState.currency = 0;
                     gameState.unlockedCharacters = [true, false, false];
                     gameState.permanentUpgrades = { health: 0, damage: 0, speed: 0, xp: 0 };
+
+                    // Reset in-memory achievements back to their default (locked/unclaimed) state
+                    achievements.forEach(ach => {
+                        ach.unlocked = false;
+                        ach.claimed = false;
+                        ach.progress = 0;
+                    });
+                    saveAchievements(); // persist the wiped state
+                    renderAchievements(); // refresh the UI immediately
 
                     alert("✅ Game has been reset to factory settings.\n\nAll progress has been deleted.");
 
@@ -3663,6 +3786,7 @@
             window.triggeredBossEvents = new Set();
             bossLockdownUntil = 0;
             finalBossActive = false;
+            finalBossSpawned = false;
             finalBossIds.clear();
             if (window._spiralFireballInterval) {
                 clearInterval(window._spiralFireballInterval);
@@ -3690,11 +3814,11 @@
             document.getElementById('statDamage').textContent = Math.floor(player.damage);
             document.getElementById('statAttackSpeed').textContent = player.attackSpeed.toFixed(2);
             document.getElementById('statMoveSpeed').textContent = player.moveSpeed.toFixed(2);
-            document.getElementById('statCritChance').textContent = (player.critBonus ? Math.floor(player.critBonus * 100) : 0) + '%';
+            document.getElementById('statCritChance').textContent = Math.floor(((player.critChance || 0) + (player.critBonus || 0)) * 100) + '%';
             document.getElementById('statMaxHP').textContent = player.maxHealth;
             document.getElementById('statDefense').textContent = (player.damageReduction ? Math.floor(player.damageReduction * 100) : 0) + '%';
             document.getElementById('statXPMult').textContent = (player.xpBonus || 1).toFixed(2) + 'x';
-            document.getElementById('statDodge').textContent = (player.upgrades.includes('dodge') ? '15' : '0') + '%';
+            document.getElementById('statDodge').textContent = Math.floor((player.dodgeChance || 0) * 100) + '%';
         }
 
         function updateHUD() {
@@ -3730,6 +3854,46 @@
             if (window.achievementCheckCounter >= 60) {
                 window.achievementCheckCounter = 0;
                 checkAchievements();
+            }
+
+            // Final Boss Health Bar
+            const bossBar = document.getElementById('bossBossBar');
+            if (finalBossActive && finalBossSpawned && bossBar) {
+                bossBar.style.display = 'block';
+
+                // Collect all 5 warlords (alive or dead-but-not-yet-spliced)
+                const warlords = enemies.filter(e => e && e.isFinalBoss);
+                const TOTAL_MAX = 100000; // 5 × 20k
+                let totalHP = 0;
+                for (let i = 0; i < warlords.length; i++) {
+                    totalHP += Math.max(0, warlords[i].health);
+                }
+                // Clamp (dead enemies still linger briefly with negative health)
+                totalHP = Math.max(0, Math.min(TOTAL_MAX, totalHP));
+
+                const pct = (totalHP / TOTAL_MAX) * 100;
+                document.getElementById('bossFill').style.width = pct + '%';
+                document.getElementById('bossBarText').textContent =
+                    totalHP.toLocaleString() + ' / ' + TOTAL_MAX.toLocaleString();
+
+                // Animate the outer bar glow
+                const outer = bossBar.querySelector('.boss-bar-outer');
+                if (outer) outer.style.animation = 'bossBarPulse 1.4s ease-in-out infinite';
+
+                // Update per-warlord pips (order matches spawn order 0-4)
+                for (let i = 0; i < 5; i++) {
+                    const pip = document.getElementById('bossPip' + i);
+                    if (!pip) continue;
+                    // Find the i-th warlord by spawn index embedded in its id (boss1_<i>_...)
+                    const warlord = enemies.find(e => e && e.isFinalBoss && e.id && e.id.startsWith('boss1_' + i + '_'));
+                    if (warlord && !warlord.dead) {
+                        pip.classList.remove('dead');
+                    } else {
+                        pip.classList.add('dead');
+                    }
+                }
+            } else if (bossBar) {
+                bossBar.style.display = 'none';
             }
         }
 
@@ -3770,12 +3934,14 @@
                 const difficulty = timeScale * powerScale * (player.difficultyMultiplier || 1.0);
 
                 const baseHp = 18;
+                const baseDmg = isBoss ? 12 : 5; // contact damage base
                 const baseSpeed = 65;
 
                 const radius = isBoss ? 26 : 16;
                 const spriteScale = isBoss ? 1.35 : 1.0;
 
                 const maxHealth = Math.round(baseHp * difficulty * (isBoss ? 18 : 1));
+                const damage = Math.round(baseDmg * difficulty);
                 const speed = (baseSpeed * (isBoss ? 0.85 : 1.0)) * (1 + Math.min(0.7, minutesSurvived * 0.08));
 
                 const id = "e" + (enemyIdSeq++);
@@ -3790,6 +3956,7 @@
                     speed,
                     health: maxHealth,
                     maxHealth,
+                    damage,
                     isBoss,
                     dead: false,
                     deadTimer: 0,
@@ -4335,7 +4502,8 @@
                     if (!target || target.dead) return;
 
                     let damage = player.damage;
-                    if (player.upgrades.includes('crit') && Math.random() < 0.2) {
+                    const totalCritChance = (player.critChance || 0) + (player.critBonus || 0);
+                    if (totalCritChance > 0 && Math.random() < totalCritChance) {
                         damage *= 2;
                         try { playSfx('crit'); } catch (e) { }
                     }
@@ -4343,8 +4511,8 @@
                     target.health -= damage;
 
                     // Frost Touch: slow + aura on melee hit
-                    if (player.upgrades.includes('frost')) {
-                        target.slowUntil = performance.now() + 2000;
+                    if (player.frostDuration) {
+                        target.slowUntil = performance.now() + (player.frostDuration * 1000);
                         target.slowFactor = 0.7;
                         target.frostFlash = 0.25;
                         frostHitEffects.push({ x: target.x, y: target.y, age: 0, lifetime: 0.35, r: target.radius + 10 });
@@ -4389,7 +4557,7 @@
                 }
 
                 // Explosive strikes for melee (optimized to reduce lag)
-                if (player.upgrades.includes('explosion') && Math.random() < 0.15) {
+                if (player.explosionChance && Math.random() < player.explosionChance) {
                     try { playSfx('explosion'); } catch (e) { }
                     explosionEffects.push({
                         x: nearest.x,
@@ -4408,6 +4576,7 @@
                     for (let i = 0; i < enemies.length && hitCount < maxHits; i++) {
                         const nearbyEnemy = enemies[i];
                         if (nearbyEnemy === nearest || nearbyEnemy.dead) continue;
+                        if (nearbyEnemy.isFinalBoss) continue; // final bosses immune to splash
 
                         // Quick distance check first (cheaper than full calculation)
                         const dx2 = nearbyEnemy.x - nearest.x;
@@ -4528,8 +4697,8 @@
             window.totalKills++;
 
             // Life steal
-            if (player.upgrades.includes('lifesteal')) {
-                player.health = Math.min(player.maxHealth, player.health + 2);
+            if (player.lifestealAmt) {
+                player.health = Math.min(player.maxHealth, player.health + player.lifestealAmt);
             }
 
             // Vampiric Aura (stacking % heal per kill)
@@ -4599,13 +4768,8 @@
                         break;
 
                     case 1:
-                        // 1.5 minutes left - FINAL BOSS (5 demon warlords, no normal spawns until defeated)
-                        startBossLockdown(99999999, true);
-                        showToastNotification('🔥 FINAL BOSS: DEMON WARLORDS! 🔥', '#ff0000');
-                        try { playSfx('warn'); } catch (e) { }
-                        setTimeout(() => {
-                            spawnEventBoss(1, difficultyRamp, 5);
-                        }, 2000);
+                        // 1.5 min mark — nothing happens here anymore.
+                        // Toast, lockdown, and spawn all fire together at 0:00 (see gameTimer <= 0 block).
                         break;
 
                     default:
@@ -4659,7 +4823,8 @@
 
                     // Scale health with player level to keep bosses challenging
                     const levelScaling = 1 + (player.level * 0.15); // +15% health per player level
-                    const finalHealth = baseHealth * difficultyRamp * levelScaling;
+                    // Final bosses have a fixed 20k HP each (100k total across 5 warlords)
+                    const finalHealth = isFinal ? 20000 : (baseHealth * difficultyRamp * levelScaling);
 
                     enemies.push({
                         x,
@@ -5020,38 +5185,60 @@
                     finalBossTimer++; // Count UP during final boss
                 } else {
                     gameTimer--;
+
+                    // SPECIAL BOSS EVENT SYSTEM - triggers at specific time marks
+                    // Timer counts DOWN from 300 (5:00) to 0
+                    // Events at: 4 min left (240s), 3 min left (180s), 2 min left (120s), 1.5 min left (90s)
+                    const timeRemaining = gameTimer;
+
+                    // Track which events have been triggered
+                    if (!window.triggeredBossEvents) window.triggeredBossEvents = new Set();
+
+                    // Trigger boss events at specific thresholds
+                    // Use <= only (no upper bound) so events can never be skipped if a tick jumps past them
+                    if (timeRemaining <= 240 && !window.triggeredBossEvents.has(4)) {
+                        window.triggeredBossEvents.add(4);
+                        triggerBossEvent(4); // 4 minutes remaining
+                    }
+                    if (timeRemaining <= 180 && !window.triggeredBossEvents.has(3)) {
+                        window.triggeredBossEvents.add(3);
+                        triggerBossEvent(3); // 3 minutes remaining
+                    }
+                    if (timeRemaining <= 120 && !window.triggeredBossEvents.has(2)) {
+                        window.triggeredBossEvents.add(2);
+                        triggerBossEvent(2); // 2 minutes remaining
+                    }
+                    if (timeRemaining <= 90 && !window.triggeredBossEvents.has(1)) {
+                        window.triggeredBossEvents.add(1);
+                        triggerBossEvent(1); // 1.5 minutes remaining - FINAL BOSS EVENT
+                    }
+
+                    // Timer reached 0 — this is where the final boss phase actually begins.
+                    // Timer hit 0 — toast, lockdown, and spawn all happen here together.
                     if (gameTimer <= 0) {
-                        victory();
-                        return;
+                        if (!finalBossActive) {
+                            // Show the final boss announcement right now at 0:00
+                            showToastNotification('🔥 FINAL BOSS: DEMON WARLORDS! 🔥', '#ff0000');
+                            try { playSfx('warn'); } catch (e) { }
+
+                            // Activate final boss phase: freezes countdown, switches to count-up
+                            startBossLockdown(99999999, true);
+                            finalBossTimer = 0;
+
+                            // Recalculate difficulty at the moment of spawn
+                            const minutesSurvived = (300 - gameTimer) / 60;
+                            const diffRamp = (1 + Math.min(2.5, minutesSurvived * 0.4)) * (player.difficultyMultiplier || 1.0);
+
+                            // Spawn after 2s dramatic pause; set finalBossSpawned only after they exist
+                            setTimeout(() => {
+                                spawnEventBoss(1, diffRamp, 5);
+                                finalBossSpawned = true;
+                            }, 2000);
+                        }
+                        // If finalBossActive is already true we're in count-up mode — do nothing here.
                     }
                 }
                 lastTimerUpdate = now;
-
-                // SPECIAL BOSS EVENT SYSTEM - triggers at specific time marks
-                // Timer counts DOWN from 300 (5:00) to 0
-                // We want events at: 4 min left (240s), 3 min left (180s), 2 min left (120s), 1 min left (60s)
-                const timeRemaining = gameTimer;
-
-                // Track which events have been triggered
-                if (!window.triggeredBossEvents) window.triggeredBossEvents = new Set();
-
-                // Trigger boss events at specific thresholds
-                if (timeRemaining <= 240 && timeRemaining > 235 && !window.triggeredBossEvents.has(4)) {
-                    window.triggeredBossEvents.add(4);
-                    triggerBossEvent(4); // 4 minutes remaining
-                }
-                if (timeRemaining <= 180 && timeRemaining > 175 && !window.triggeredBossEvents.has(3)) {
-                    window.triggeredBossEvents.add(3);
-                    triggerBossEvent(3); // 3 minutes remaining
-                }
-                if (timeRemaining <= 120 && timeRemaining > 115 && !window.triggeredBossEvents.has(2)) {
-                    window.triggeredBossEvents.add(2);
-                    triggerBossEvent(2); // 2 minutes remaining
-                }
-                if (timeRemaining <= 90 && timeRemaining > 85 && !window.triggeredBossEvents.has(1)) {
-                    window.triggeredBossEvents.add(1);
-                    triggerBossEvent(1); // 1.5 minutes remaining - FINAL BOSS EVENT
-                }
             }
 
             // Boss lockdown: keep fights clean (prevents spawn overload/freezes)
@@ -5060,8 +5247,8 @@
             }
 
             // Regeneration
-            if (player.upgrades.includes('regen')) {
-                player.health = Math.min(player.maxHealth, player.health + dt);
+            if (player.regenRate) {
+                player.health = Math.min(player.maxHealth, player.health + player.regenRate * dt);
             }
 
 
@@ -5569,25 +5756,51 @@
 
                 // Collision with player
                 if (dist < enemy.radius + player.radius) {
-                    player.health -= enemy.damage * dt;
-                    const _nowH = performance.now();
-                    if (_nowH - _lastHitSfx > 150) { _lastHitSfx = _nowH; try { playSfx('hit'); } catch (e) { } }
+                    // Dodge check — roll before any damage lands
+                    if (player.dodgeChance && Math.random() < player.dodgeChance) {
+                        // Dodged — skip all damage and effects for this tick
+                    } else {
+                        let contactDmg = (enemy.damage || 5) * dt;
+                        if (player.damageReduction) contactDmg *= (1 - player.damageReduction);
+                        // Ghost Shield absorbs first
+                        if (player.shield && player.shield > 0) {
+                            player.shield -= contactDmg;
+                            if (player.shield < 0) {
+                                contactDmg = -player.shield;
+                                player.shield = 0;
+                            } else {
+                                contactDmg = 0;
+                            }
+                        }
+                        player.health -= contactDmg;
 
-                    // Trigger hurt animation occasionally
-                    if (Math.random() < 0.05 && player.animState !== 'dead' && player.animState !== 'attack') {
-                        player.animState = 'hurt';
-                        player.animStateTimer = 0.3;
-                    }
+                        // Thorns: reflect damage back to attacker
+                        if (player.thornsReflect && contactDmg > 0) {
+                            enemy.health -= contactDmg * player.thornsReflect;
+                            if (enemy.health <= 0 && !enemy.dead) {
+                                markEnemyDead(enemy);
+                            }
+                        }
 
-                    if (player.health <= 0) {
-                        player.animState = 'dead';
-                        player.dead = true;
-                        const _nowD = performance.now();
-                        if (_nowD - _lastDeathSfx > 500) { _lastDeathSfx = _nowD; try { playSfx('death'); } catch (e) { } }
-                        setTimeout(() => {
-                            gameOver();
-                        }, 1000); // Wait for death animation
-                        return;
+                        const _nowH = performance.now();
+                        if (_nowH - _lastHitSfx > 150) { _lastHitSfx = _nowH; try { playSfx('hit'); } catch (e) { } }
+
+                        // Trigger hurt animation occasionally
+                        if (Math.random() < 0.05 && player.animState !== 'dead' && player.animState !== 'attack') {
+                            player.animState = 'hurt';
+                            player.animStateTimer = 0.3;
+                        }
+
+                        if (player.health <= 0) {
+                            player.animState = 'dead';
+                            player.dead = true;
+                            const _nowD = performance.now();
+                            if (_nowD - _lastDeathSfx > 500) { _lastDeathSfx = _nowD; try { playSfx('death'); } catch (e) { } }
+                            setTimeout(() => {
+                                gameOver();
+                            }, 1000); // Wait for death animation
+                            return;
+                        }
                     }
                 }
 
@@ -5705,7 +5918,8 @@
                     if (dist < enemy.radius + proj.radius) {
                         let damage = proj.damage;
 
-                        if (player.upgrades.includes('crit') && Math.random() < 0.2) {
+                        const totalCritChance = (player.critChance || 0) + (player.critBonus || 0);
+                        if (totalCritChance > 0 && Math.random() < totalCritChance) {
                             damage *= 2;
                             try { playSfx('crit'); } catch (e) { }
                         }
@@ -5713,8 +5927,8 @@
                         enemy.health -= damage;
 
                         // Frost Touch: slow + blue aura on hit (reduced on bosses)
-                        if (player.upgrades.includes('frost')) {
-                            enemy.slowUntil = performance.now() + 2000;
+                        if (player.frostDuration) {
+                            enemy.slowUntil = performance.now() + (player.frostDuration * 1000);
                             enemy.slowFactor = 0.7; // 30% slow
                             enemy.frostFlash = 0.25;
                             // Skip visual effects on bosses to prevent lag
@@ -5725,9 +5939,9 @@
                         }
 
                         // Burning Rage: burn enemies over time with fire particles
-                        if (player.upgrades.includes('burn')) {
+                        if (player.burnDuration) {
                             enemy.burning = true;
-                            enemy.burnEndTime = performance.now() + 3000; // 3 seconds
+                            enemy.burnEndTime = performance.now() + (player.burnDuration * 1000);
                             enemy.burnDamage = damage * 0.3; // 30% of hit damage per tick
                             enemy.lastBurnTick = performance.now();
 
@@ -5748,10 +5962,10 @@
                         }
 
                         // Chain Lightning: jump to nearby enemies with visual effects
-                        if (player.upgrades.includes('chain')) {
+                        if (player.chainJumps) {
                             const chainRange = 120;
                             const chainDamage = damage * 0.5;
-                            const maxChains = 3;
+                            const maxChains = player.chainJumps;
                             const chainedEnemies = new Set([enemy]);
                             let currentTargets = [enemy];
 
@@ -5762,6 +5976,7 @@
                                     for (let ci = 0; ci < enemies.length && nextTargets.length < 2; ci++) {
                                         const nextEnemy = enemies[ci];
                                         if (!nextEnemy || nextEnemy.dead || chainedEnemies.has(nextEnemy)) continue;
+                                        if (nextEnemy.isFinalBoss) continue; // final bosses are immune to chain
 
                                         const dx = nextEnemy.x - currentEnemy.x;
                                         const dy = nextEnemy.y - currentEnemy.y;
@@ -5804,7 +6019,7 @@
                         }
 
                         // Explosive strikes - create explosion effect and splash damage (reduced on bosses)
-                        if (player.upgrades.includes('explosion') && Math.random() < 0.15) {
+                        if (player.explosionChance && Math.random() < player.explosionChance) {
                             // Skip explosion effects on bosses to prevent lag
                             if (!enemy.isBoss) {
                                 try { playSfx('explosion'); } catch (e) { }
@@ -5825,6 +6040,7 @@
                             for (let sj = 0; sj < enemies.length && splashHits < splashMax; sj++) {
                                 const nearbyEnemy = enemies[sj];
                                 if (!nearbyEnemy || nearbyEnemy === enemy || nearbyEnemy.dead) continue;
+                                if (nearbyEnemy.isFinalBoss) continue; // final bosses immune to splash
                                 const dx2 = nearbyEnemy.x - enemy.x;
                                 const dy2 = nearbyEnemy.y - enemy.y;
                                 if (Math.abs(dx2) > splashR || Math.abs(dy2) > splashR) continue;
@@ -5934,8 +6150,23 @@
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
                 if (dist < player.radius + fb.radius) {
+                    // Dodge check
+                    if (player.dodgeChance && Math.random() < player.dodgeChance) {
+                        bossFireballs.splice(i, 1);
+                        continue;
+                    }
                     let dmg = fb.damage;
-                    if (player.armor) dmg *= (1 - player.armor);
+                    if (player.damageReduction) dmg *= (1 - player.damageReduction);
+                    // Ghost Shield absorbs first
+                    if (player.shield && player.shield > 0) {
+                        player.shield -= dmg;
+                        if (player.shield < 0) {
+                            dmg = -player.shield;
+                            player.shield = 0;
+                        } else {
+                            dmg = 0;
+                        }
+                    }
                     player.health -= dmg;
 
                     explosionEffects.push({
@@ -6747,7 +6978,18 @@
                     const dx = p.x - player.x;
                     const dy = p.y - player.y;
                     if (Math.hypot(dx, dy) < p.r + 12) {
-                        player.health -= FIREBALL_DAMAGE;
+                        // Dodge check
+                        if (player.dodgeChance && Math.random() < player.dodgeChance) {
+                            return false; // dodged, remove projectile
+                        }
+                        let dmg = FIREBALL_DAMAGE;
+                        if (player.damageReduction) dmg *= (1 - player.damageReduction);
+                        if (player.shield && player.shield > 0) {
+                            player.shield -= dmg;
+                            if (player.shield < 0) { dmg = -player.shield; player.shield = 0; }
+                            else { dmg = 0; }
+                        }
+                        player.health -= dmg;
                         try { playSfx('hit'); } catch (e) { }
                         return false;
                     }
